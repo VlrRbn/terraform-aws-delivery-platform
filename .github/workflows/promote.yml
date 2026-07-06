@@ -1,0 +1,541 @@
+name: terraform-promote
+run-name: Terraform promote ${{ inputs.target_env }} ${{ inputs.release_id }} by @${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: 'Target environment: dev, stage, or prod'
+        required: true
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+      release_id:
+        description: Release/change identifier
+        required: true
+        type: string
+      source_env:
+        description: Source environment for promotion evidence. Use none for dev.
+        required: true
+        default: none
+        type: choice
+        options:
+          - none
+          - dev
+          - stage
+      source_workflow_run_url:
+        description: Previous environment workflow run URL. Use none for dev.
+        required: true
+        default: none
+        type: string
+      confirm_apply:
+        description: Type APPLY to allow exact-plan apply after approval
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+env:
+  PROJECT_DIR: .
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+  TERRAFORM_VERSION: 1.14.4
+  AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-1' }}
+  TARGET_ENV: ${{ inputs.target_env }}
+  RELEASE_ID: ${{ inputs.release_id }}
+  SOURCE_ENV: ${{ inputs.source_env }}
+  SOURCE_WORKFLOW_RUN_URL: ${{ inputs.source_workflow_run_url }}
+  CONFIRM_APPLY: ${{ inputs.confirm_apply }}
+
+concurrency:
+  group: delivery-platform-promote-${{ inputs.target_env }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan and risk review
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    outputs:
+      target_env: ${{ steps.inputs.outputs.target_env }}
+      artifact_name: ${{ steps.artifact.outputs.artifact_name }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Validate workflow inputs
+        id: inputs
+        run: |
+          set -Eeuo pipefail
+          case "$TARGET_ENV" in dev|stage|prod) ;; *) exit 64 ;; esac
+          if [[ "$CONFIRM_APPLY" != "APPLY" ]]; then
+            echo "confirm_apply must be APPLY" >&2
+            exit 64
+          fi
+          if [[ -z "$RELEASE_ID" ]]; then
+            echo "release_id is required" >&2
+            exit 64
+          fi
+          if [[ ! "$RELEASE_ID" =~ ^[A-Za-z0-9._-]{1,80}$ ]]; then
+            echo "release_id must contain only letters, numbers, dot, underscore, and dash; max length 80" >&2
+            exit 64
+          fi
+          if [[ "$TARGET_ENV" == "dev" && "$SOURCE_ENV" != "none" ]]; then
+            echo "dev promotion must use source_env=none" >&2
+            exit 64
+          fi
+          if [[ "$TARGET_ENV" == "dev" && "$SOURCE_WORKFLOW_RUN_URL" != "none" ]]; then
+            echo "dev promotion must use source_workflow_run_url=none" >&2
+            exit 64
+          fi
+          if [[ "$TARGET_ENV" == "stage" && "$SOURCE_ENV" != "dev" ]]; then
+            echo "stage promotion must use source_env=dev" >&2
+            exit 64
+          fi
+          if [[ "$TARGET_ENV" == "prod" && "$SOURCE_ENV" != "stage" ]]; then
+            echo "prod promotion must use source_env=stage" >&2
+            exit 64
+          fi
+          if [[ "$TARGET_ENV" != "dev" ]]; then
+            if [[ -z "$SOURCE_WORKFLOW_RUN_URL" || "$SOURCE_WORKFLOW_RUN_URL" == "none" ]]; then
+              echo "stage/prod promotion requires source_workflow_run_url" >&2
+              exit 64
+            fi
+            if [[ ! "$SOURCE_WORKFLOW_RUN_URL" =~ ^https://github.com/${{ github.repository }}/actions/runs/[0-9]+$ ]]; then
+              echo "source_workflow_run_url must be the canonical GitHub Actions run URL for this repository" >&2
+              exit 64
+            fi
+          fi
+          echo "target_env=$TARGET_ENV" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@v3
+
+      - name: Run local safety checks before AWS credentials
+        run: ${{ env.PROJECT_DIR }}/scripts/run-local-checks.sh
+
+      - name: Validate required GitHub variables
+        run: |
+          set -Eeuo pipefail
+          missing=0
+          for name in TF_STATE_BUCKET TF_WEB_AMI_ID TF_SSM_PROXY_AMI_ID TF_GITHUB_OIDC_PROVIDER_ARN; do
+            value="${!name:-}"
+            if [[ -z "$value" ]]; then
+              echo "Missing GitHub variable: $name" >&2
+              missing=1
+            fi
+          done
+          exit "$missing"
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_WEB_AMI_ID: ${{ vars.TF_WEB_AMI_ID }}
+          TF_SSM_PROXY_AMI_ID: ${{ vars.TF_SSM_PROXY_AMI_ID }}
+          TF_GITHUB_OIDC_PROVIDER_ARN: ${{ vars.TF_GITHUB_OIDC_PROVIDER_ARN }}
+
+      - name: Verify source workflow run
+        id: source_run
+        if: env.TARGET_ENV != 'dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          if [[ ! "$SOURCE_WORKFLOW_RUN_URL" =~ ^https://github\.com/${GITHUB_REPOSITORY}/actions/runs/([0-9]+)$ ]]; then
+            echo "source_workflow_run_url must be the canonical GitHub Actions run URL for this repository" >&2
+            exit 64
+          fi
+
+          run_id="${BASH_REMATCH[1]}"
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")"
+          status="$(jq -r '.status // ""' <<<"$run_json")"
+          conclusion="$(jq -r '.conclusion // ""' <<<"$run_json")"
+          head_sha="$(jq -r '.head_sha // ""' <<<"$run_json")"
+          html_url="$(jq -r '.html_url // ""' <<<"$run_json")"
+          workflow_name="$(jq -r '.name // ""' <<<"$run_json")"
+          workflow_path="$(jq -r '.path // ""' <<<"$run_json")"
+          display_title="$(jq -r '.display_title // ""' <<<"$run_json")"
+
+          if [[ "$status" != "completed" || "$conclusion" != "success" ]]; then
+            echo "source workflow run is not completed successfully: status=$status conclusion=$conclusion" >&2
+            exit 64
+          fi
+          if [[ "$head_sha" != "${GITHUB_SHA}" ]]; then
+            echo "source workflow run SHA does not match this workflow SHA: source=$head_sha current=${GITHUB_SHA}" >&2
+            exit 64
+          fi
+          if [[ "$workflow_path" != ".github/workflows/promote.yml" ]]; then
+            echo "source workflow run must be promote: name=$workflow_name path=$workflow_path" >&2
+            exit 64
+          fi
+
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "html_url=$html_url" >> "$GITHUB_OUTPUT"
+          echo "conclusion=$conclusion" >> "$GITHUB_OUTPUT"
+          echo "workflow_name=$workflow_name" >> "$GITHUB_OUTPUT"
+          echo "workflow_path=$workflow_path" >> "$GITHUB_OUTPUT"
+          echo "display_title=$display_title" >> "$GITHUB_OUTPUT"
+
+      - name: Download source apply artifact
+        if: env.TARGET_ENV != 'dev'
+        uses: actions/download-artifact@v6
+        with:
+          name: delivery-platform-${{ env.SOURCE_ENV }}-${{ env.RELEASE_ID }}-apply
+          path: /tmp/delivery-platform-source-apply
+          run-id: ${{ steps.source_run.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Validate source promotion manifest
+        if: env.TARGET_ENV != 'dev'
+        run: |
+          set -Eeuo pipefail
+          manifest="/tmp/delivery-platform-source-apply/promotion-manifest.json"
+          if [[ ! -s "$manifest" ]]; then
+            echo "source apply artifact does not contain promotion-manifest.json" >&2
+            exit 64
+          fi
+
+          jq -e \
+            --arg release_id "$RELEASE_ID" \
+            --arg source_env "$SOURCE_ENV" \
+            --arg commit_sha "${{ github.sha }}" \
+            --arg source_url "$SOURCE_WORKFLOW_RUN_URL" \
+            '
+              .release_id == $release_id
+              and .target_env == $source_env
+              and .commit_sha == $commit_sha
+              and .workflow_run_url == $source_url
+              and .apply_exitcode == "0"
+              and .post_apply_exitcode == "0"
+              and .final_status == "PROMOTABLE"
+            ' "$manifest" >/dev/null
+
+      - name: Select plan role
+        id: role
+        run: |
+          case "$TARGET_ENV" in
+            dev) role="${{ vars.TF_PLAN_ROLE_ARN_DEV }}" ;;
+            stage) role="${{ vars.TF_PLAN_ROLE_ARN_STAGE }}" ;;
+            prod) role="${{ vars.TF_PLAN_ROLE_ARN_PROD }}" ;;
+          esac
+          if [[ -z "$role" ]]; then
+            echo "Missing TF_PLAN_ROLE_ARN_${TARGET_ENV}" >&2
+            exit 1
+          fi
+          echo "role_arn=$role" >> "$GITHUB_OUTPUT"
+
+      - name: Assume plan role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Write temporary Terraform config
+        run: ${{ env.PROJECT_DIR }}/scripts/write-terraform-env-files.sh "$TARGET_ENV"
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_WEB_AMI_ID: ${{ vars.TF_WEB_AMI_ID }}
+          TF_SSM_PROXY_AMI_ID: ${{ vars.TF_SSM_PROXY_AMI_ID }}
+          TF_GITHUB_OWNER: ${{ vars.TF_GITHUB_OWNER || github.repository_owner }}
+          TF_GITHUB_REPO: ${{ vars.TF_GITHUB_REPO || github.event.repository.name }}
+          TF_GITHUB_OIDC_PROVIDER_ARN: ${{ vars.TF_GITHUB_OIDC_PROVIDER_ARN }}
+
+      - name: Terraform init and plan
+        working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ inputs.target_env }}
+        run: |
+          terraform init -backend-config=backend.hcl -input=false -no-color
+          terraform validate -no-color
+          terraform plan -out=tfplan -input=false -no-color
+          terraform show -no-color tfplan > tfplan.txt
+          terraform show -json tfplan > tfplan.json
+          sha256sum tfplan > tfplan.sha256
+
+      - name: Run policy gates
+        working-directory: ${{ github.workspace }}
+        env:
+          SOURCE_WORKFLOW_RUN_ID: ${{ steps.source_run.outputs.run_id }}
+          SOURCE_WORKFLOW_HEAD_SHA: ${{ steps.source_run.outputs.head_sha }}
+          SOURCE_WORKFLOW_CONCLUSION: ${{ steps.source_run.outputs.conclusion }}
+          SOURCE_WORKFLOW_NAME: ${{ steps.source_run.outputs.workflow_name }}
+          SOURCE_WORKFLOW_PATH: ${{ steps.source_run.outputs.workflow_path }}
+          SOURCE_WORKFLOW_DISPLAY_TITLE: ${{ steps.source_run.outputs.display_title }}
+        run: |
+          set -Eeuo pipefail
+          root="${PROJECT_DIR}/terraform/envs/${TARGET_ENV}"
+          mkdir -p "$root/policy-results" "$root/cost-policy-results" "$root/risk-results"
+
+          set +e
+          OUT_DIR="$root/policy-results" \
+            "$PROJECT_DIR/policies/security-policy.sh" "$root/tfplan.json" \
+            2>&1 | tee "$root/policy-results/policy-output.txt"
+          policy_ec=${PIPESTATUS[0]}
+          set -e
+          echo "$policy_ec" > "$root/policy-results/policy-exitcode.txt"
+          case "$policy_ec" in 0|2) ;; *) exit "$policy_ec" ;; esac
+
+          set +e
+          OUT_DIR="$root/cost-policy-results" \
+            "$PROJECT_DIR/policies/cost-policy.sh" "$root/tfplan.json" "$TARGET_ENV" \
+            2>&1 | tee "$root/cost-policy-results/cost-policy-output.txt"
+          cost_ec=${PIPESTATUS[0]}
+          set -e
+          echo "$cost_ec" > "$root/cost-policy-results/cost-policy-exitcode.txt"
+          case "$cost_ec" in 0|2) ;; *) exit "$cost_ec" ;; esac
+
+          promotion_args=()
+          if [[ "$TARGET_ENV" != "dev" ]]; then
+            jq -n \
+              --arg release_id "$RELEASE_ID" \
+              --arg source_env "$SOURCE_ENV" \
+              --arg status "passed" \
+              --arg commit_sha "${{ github.sha }}" \
+              --arg source_workflow_run_url "$SOURCE_WORKFLOW_RUN_URL" \
+              --arg source_workflow_run_id "$SOURCE_WORKFLOW_RUN_ID" \
+              --arg source_workflow_head_sha "$SOURCE_WORKFLOW_HEAD_SHA" \
+              --arg source_workflow_conclusion "$SOURCE_WORKFLOW_CONCLUSION" \
+              --arg source_workflow_name "$SOURCE_WORKFLOW_NAME" \
+              --arg source_workflow_path "$SOURCE_WORKFLOW_PATH" \
+              --arg source_workflow_display_title "$SOURCE_WORKFLOW_DISPLAY_TITLE" \
+              '{
+                release_id: $release_id,
+                source_env: $source_env,
+                status: $status,
+                commit_sha: $commit_sha,
+                source_workflow_run_url: $source_workflow_run_url,
+                source_workflow_run_id: $source_workflow_run_id,
+                source_workflow_head_sha: $source_workflow_head_sha,
+                source_workflow_conclusion: $source_workflow_conclusion,
+                source_workflow_name: $source_workflow_name,
+                source_workflow_path: $source_workflow_path,
+                source_workflow_display_title: $source_workflow_display_title
+              }' \
+              > "$root/promotion-evidence.json"
+            cp "$root/promotion-evidence.json" "$root/source-workflow-run-verification.json"
+            promotion_args=(PROMOTION_EVIDENCE_FILE="$root/promotion-evidence.json" SOURCE_ENV="$SOURCE_ENV")
+          fi
+
+          set +e
+          env \
+            POLICY_DIR="$root/policy-results" \
+            COST_DIR="$root/cost-policy-results" \
+            OUT_DIR="$root/risk-results" \
+            RELEASE_ID="$RELEASE_ID" \
+            "${promotion_args[@]}" \
+            "$PROJECT_DIR/policies/risk-classifier.sh" "$root/tfplan.json" "$TARGET_ENV" \
+            2>&1 | tee "$root/risk-results/risk-classifier-output.txt"
+          risk_ec=${PIPESTATUS[0]}
+          set -e
+          echo "$risk_ec" > "$root/risk-results/risk-classifier-exitcode.txt"
+          case "$risk_ec" in 0|2) ;; *) exit "$risk_ec" ;; esac
+
+      - name: Prepare review artifact
+        id: artifact
+        working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ inputs.target_env }}
+        run: |
+          artifact="delivery-platform-${TARGET_ENV}-${RELEASE_ID}-plan"
+          mkdir -p review-artifact
+          cp backend.hcl terraform.auto.tfvars review-artifact/
+          cp tfplan tfplan.sha256 tfplan.txt tfplan.json review-artifact/
+          cp -r policy-results cost-policy-results risk-results review-artifact/
+          [[ -f promotion-evidence.json ]] && cp promotion-evidence.json review-artifact/ || true
+          [[ -f source-workflow-run-verification.json ]] && cp source-workflow-run-verification.json review-artifact/ || true
+          echo "artifact_name=$artifact" >> "$GITHUB_OUTPUT"
+
+      - name: Upload review artifact before approval
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.artifact.outputs.artifact_name }}
+          path: ${{ env.PROJECT_DIR }}/terraform/envs/${{ inputs.target_env }}/review-artifact/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Stop if risk gate blocked apply
+        working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ inputs.target_env }}
+        run: jq -e '.apply_allowed == true'
+          review-artifact/risk-results/risk-decision.json
+
+  apply:
+    name: Apply exact reviewed plan
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: terraform-${{ needs.plan.outputs.target_env }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Download approved review artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: ${{ needs.plan.outputs.artifact_name }}
+          path: /tmp/delivery-platform-review-artifact
+
+      - name: Select apply role
+        id: role
+        run: |
+          case "${{ needs.plan.outputs.target_env }}" in
+            dev) role="${{ secrets.TF_APPLY_ROLE_ARN_DEV }}" ;;
+            stage) role="${{ secrets.TF_APPLY_ROLE_ARN_STAGE }}" ;;
+            prod) role="${{ secrets.TF_APPLY_ROLE_ARN_PROD }}" ;;
+          esac
+          if [[ -z "$role" ]]; then
+            echo "Missing TF_APPLY_ROLE_ARN_${{ needs.plan.outputs.target_env }}" >&2
+            exit 1
+          fi
+          echo "role_arn=$role" >> "$GITHUB_OUTPUT"
+
+      - name: Assume apply role after approval
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Restore reviewed Terraform config
+        working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}
+        run: |
+          cp /tmp/delivery-platform-review-artifact/backend.hcl ./backend.hcl
+          cp /tmp/delivery-platform-review-artifact/terraform.auto.tfvars ./terraform.auto.tfvars
+
+      - name: Terraform init
+        working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}
+        run: terraform init -backend-config=backend.hcl -input=false -no-color
+
+      - name: Apply exact saved plan
+        working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}
+        run: |
+          cp /tmp/delivery-platform-review-artifact/tfplan ./tfplan
+          cp /tmp/delivery-platform-review-artifact/tfplan.sha256 ./tfplan.sha256
+          sha256sum -c tfplan.sha256
+          set +e
+          terraform apply -input=false -no-color tfplan 2>&1 | tee apply.txt
+          apply_ec=${PIPESTATUS[0]}
+          set -e
+          echo "$apply_ec" > apply_exitcode.txt
+          exit "$apply_ec"
+
+      - name: Post-apply drift check
+        if: always()
+        working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}
+        run: |
+          set +e
+          terraform init -backend-config=backend.hcl -input=false -no-color > post_apply_init.txt 2>&1
+          terraform plan -detailed-exitcode -input=false -no-color > post_apply_plan.txt 2>&1
+          ec=$?
+          set -e
+          echo "$ec" > post_apply_exitcode.txt
+          [[ "$ec" -eq 0 ]]
+
+      - name: Write promotion manifest
+        if: always()
+        working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}
+        run: |
+          set -Eeuo pipefail
+          apply_ec="missing"
+          post_apply_ec="missing"
+          [[ -s apply_exitcode.txt ]] && apply_ec="$(tr -d '[:space:]' < apply_exitcode.txt)"
+          [[ -s post_apply_exitcode.txt ]] && post_apply_ec="$(tr -d '[:space:]' < post_apply_exitcode.txt)"
+
+          final_status="NOT_PROMOTABLE"
+          if [[ "$apply_ec" == "0" && "$post_apply_ec" == "0" ]]; then
+            final_status="PROMOTABLE"
+          fi
+
+          tfplan_sha256="missing"
+          if [[ -s /tmp/delivery-platform-review-artifact/tfplan.sha256 ]]; then
+            tfplan_sha256="$(awk '{print $1}' /tmp/delivery-platform-review-artifact/tfplan.sha256)"
+          fi
+
+          security_policy="n/a"
+          cost_policy="n/a"
+          risk="n/a"
+          apply_allowed="n/a"
+          [[ -s /tmp/delivery-platform-review-artifact/policy-results/policy-decision.txt ]] && security_policy="$(tr -d '[:space:]' < /tmp/delivery-platform-review-artifact/policy-results/policy-decision.txt)"
+          [[ -s /tmp/delivery-platform-review-artifact/cost-policy-results/cost-decision.txt ]] && cost_policy="$(tr -d '[:space:]' < /tmp/delivery-platform-review-artifact/cost-policy-results/cost-decision.txt)"
+          if [[ -s /tmp/delivery-platform-review-artifact/risk-results/risk-decision.json ]]; then
+            risk="$(jq -r '.risk // "n/a"' /tmp/delivery-platform-review-artifact/risk-results/risk-decision.json)"
+            apply_allowed="$(jq -r '.apply_allowed // "n/a"' /tmp/delivery-platform-review-artifact/risk-results/risk-decision.json)"
+          fi
+
+          jq -n \
+            --arg release_id "$RELEASE_ID" \
+            --arg target_env "${{ needs.plan.outputs.target_env }}" \
+            --arg source_env "$SOURCE_ENV" \
+            --arg commit_sha "${{ github.sha }}" \
+            --arg workflow_run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg workflow_run_id "${{ github.run_id }}" \
+            --arg review_artifact "${{ needs.plan.outputs.artifact_name }}" \
+            --arg apply_artifact "delivery-platform-${{ needs.plan.outputs.target_env }}-${RELEASE_ID}-apply" \
+            --arg tfplan_sha256 "$tfplan_sha256" \
+            --arg security_policy "$security_policy" \
+            --arg cost_policy "$cost_policy" \
+            --arg risk "$risk" \
+            --arg apply_allowed "$apply_allowed" \
+            --arg apply_exitcode "$apply_ec" \
+            --arg post_apply_exitcode "$post_apply_ec" \
+            --arg final_status "$final_status" \
+            '{
+              release_id: $release_id,
+              target_env: $target_env,
+              source_env: $source_env,
+              commit_sha: $commit_sha,
+              workflow_run_url: $workflow_run_url,
+              workflow_run_id: $workflow_run_id,
+              review_artifact: $review_artifact,
+              apply_artifact: $apply_artifact,
+              tfplan_sha256: $tfplan_sha256,
+              security_policy: $security_policy,
+              cost_policy: $cost_policy,
+              risk: $risk,
+              apply_allowed: $apply_allowed,
+              apply_exitcode: $apply_exitcode,
+              post_apply_exitcode: $post_apply_exitcode,
+              final_status: $final_status
+            }' > promotion-manifest.json
+
+      - name: Upload apply artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: delivery-platform-${{ needs.plan.outputs.target_env }}-${{ env.RELEASE_ID }}-apply
+          path: |
+            ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}/apply.txt
+            ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}/apply_exitcode.txt
+            ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}/post_apply_init.txt
+            ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}/post_apply_plan.txt
+            ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}/post_apply_exitcode.txt
+            ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}/promotion-manifest.json
+          if-no-files-found: warn
+          retention-days: 7

@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="720" viewBox="0 0 1160 720" role="img" aria-labelledby="title desc">
+  <title id="title">Terraform AWS Delivery Platform Architecture</title>
+  <desc id="desc">GitHub Actions delivery pipeline with Terraform policy gates, AWS OIDC roles, S3 state, and multi-environment AWS runtime stacks.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7f4ed; }
+      .box { fill: #fffdf8; stroke: #2f3a3d; stroke-width: 2; rx: 14; }
+      .group { fill: #ebe3d1; stroke: #596266; stroke-width: 2; rx: 18; }
+      .accent { fill: #d9653b; }
+      .safe { fill: #d8eadf; stroke: #2d6a4f; stroke-width: 2; rx: 12; }
+      .warn { fill: #ffe8bd; stroke: #9b5b00; stroke-width: 2; rx: 12; }
+      .text { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; fill: #1f2933; font-size: 16px; }
+      .small { font-size: 13px; fill: #374151; }
+      .title { font-size: 24px; font-weight: 700; }
+      .label { font-size: 15px; font-weight: 700; }
+      .arrow { stroke: #2f3a3d; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .dashed { stroke-dasharray: 7 6; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#2f3a3d" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1160" height="720" />
+  <text class="text title" x="40" y="48">Terraform AWS Delivery Platform</text>
+  <text class="text small" x="40" y="74">Exact-plan delivery, policy gates, environment promotion, drift detection, and audit evidence.</text>
+
+  <rect class="group" x="40" y="105" width="315" height="500" />
+  <text class="text label" x="62" y="136">GitHub Control Plane</text>
+
+  <rect class="box" x="65" y="160" width="265" height="64" />
+  <text class="text label" x="88" y="188">Pull Request</text>
+  <text class="text small" x="88" y="210">fmt, tests, policy unit tests</text>
+
+  <rect class="box" x="65" y="250" width="265" height="72" />
+  <text class="text label" x="88" y="279">Plan Job</text>
+  <text class="text small" x="88" y="301">Terraform plan + JSON plan</text>
+
+  <rect class="warn" x="65" y="348" width="265" height="92" />
+  <text class="text label" x="88" y="378">Policy + Risk Gates</text>
+  <text class="text small" x="88" y="400">security, cost, blast radius</text>
+  <text class="text small" x="88" y="420">GO / HOLD / BLOCKED</text>
+
+  <rect class="safe" x="65" y="466" width="265" height="92" />
+  <text class="text label" x="88" y="496">Environment Approval</text>
+  <text class="text small" x="88" y="518">terraform-dev/stage/prod</text>
+  <text class="text small" x="88" y="538">apply exact saved tfplan</text>
+
+  <rect class="group" x="420" y="105" width="300" height="500" />
+  <text class="text label" x="442" y="136">AWS Delivery Foundation</text>
+
+  <rect class="box" x="445" y="160" width="250" height="76" />
+  <text class="text label" x="468" y="190">GitHub OIDC</text>
+  <text class="text small" x="468" y="212">no long-lived AWS keys</text>
+
+  <rect class="box" x="445" y="270" width="250" height="82" />
+  <text class="text label" x="468" y="300">Plan / Apply Roles</text>
+  <text class="text small" x="468" y="322">separate IAM permissions</text>
+  <text class="text small" x="468" y="342">per-environment trust</text>
+
+  <rect class="box" x="445" y="386" width="250" height="82" />
+  <text class="text label" x="468" y="416">S3 Remote State</text>
+  <text class="text small" x="468" y="438">versioning + lockfile</text>
+  <text class="text small" x="468" y="458">dev/stage/prod state keys</text>
+
+  <rect class="box" x="445" y="502" width="250" height="64" />
+  <text class="text label" x="468" y="531">CloudTrail Evidence</text>
+  <text class="text small" x="468" y="553">who changed what and when</text>
+
+  <rect class="group" x="785" y="105" width="330" height="500" />
+  <text class="text label" x="807" y="136">AWS Runtime Environments</text>
+
+  <rect class="box" x="812" y="160" width="275" height="70" />
+  <text class="text label" x="835" y="190">dev / stage / prod roots</text>
+  <text class="text small" x="835" y="212">same module, different inputs</text>
+
+  <rect class="box" x="812" y="260" width="275" height="82" />
+  <text class="text label" x="835" y="290">VPC + Private Subnets</text>
+  <text class="text small" x="835" y="312">SSM endpoints and secret access</text>
+  <text class="text small" x="835" y="332">internal application path</text>
+
+  <rect class="box" x="812" y="376" width="275" height="82" />
+  <text class="text label" x="835" y="406">ALB + ASG</text>
+  <text class="text small" x="835" y="428">rolling refresh controls</text>
+  <text class="text small" x="835" y="448">health alarms and checkpoints</text>
+
+  <rect class="box" x="812" y="492" width="275" height="74" />
+  <text class="text label" x="835" y="522">Runtime Evidence</text>
+  <text class="text small" x="835" y="544">health, drift, incident notes</text>
+
+  <path class="arrow" d="M330 192 C375 192, 395 190, 445 190" />
+  <path class="arrow" d="M330 286 C378 286, 396 302, 445 309" />
+  <path class="arrow" d="M330 512 C392 512, 392 430, 445 430" />
+  <path class="arrow" d="M695 309 C755 309, 760 195, 812 195" />
+  <path class="arrow" d="M695 430 C755 430, 760 417, 812 417" />
+  <path class="arrow dashed" d="M950 566 C950 640, 570 650, 570 566" />
+  <text class="text small" x="612" y="668">post-apply drift + CloudTrail audit closes the loop</text>
+</svg>

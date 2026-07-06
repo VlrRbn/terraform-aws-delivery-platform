@@ -1,0 +1,39 @@
+# Terraform runtime/private files
+**/.terraform/
+**/backend.hcl
+**/terraform.tfvars
+**/*.auto.tfvars
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/tfplan
+**/tfplan.*
+**/plan.txt
+**/apply.txt
+**/*exitcode.txt
+**/post_apply_*.txt
+**/drift-*.txt
+
+# Local evidence and reports
+evidence/*
+!evidence/.gitkeep
+artifacts/
+policy-results/
+cost-policy-results/
+risk-results/
+review-artifact/
+
+# Secrets and local env files
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/

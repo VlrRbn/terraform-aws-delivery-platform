@@ -1,0 +1,71 @@
+name: terraform-pr-checks
+
+on:
+  pull_request:
+    paths:
+      - '**'
+      - .github/workflows/pr-checks.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: delivery-platform-pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT_DIR: .
+  TERRAFORM_VERSION: '1.14.4'
+
+jobs:
+  checks:
+    name: Safe project checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@v3
+
+      - name: Shell syntax
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          mapfile -t shell_scripts < <(find scripts policies -type f -name '*.sh' | sort)
+          if ((${#shell_scripts[@]} == 0)); then
+            echo "No shell scripts found under scripts/ or policies/." >&2
+            exit 1
+          fi
+          bash -n "${shell_scripts[@]}"
+
+      - name: Run safe local checks
+        working-directory: ${{ github.workspace }}
+        run: RUN_TERRAFORM=true ${{ env.PROJECT_DIR }}/scripts/run-local-checks.sh
+
+      - name: Summary
+        run: |
+          {
+            echo "## Terraform Delivery Platform PR Checks"
+            echo
+            echo "- checkout: exact workflow commit"
+            echo "- shell syntax: passed"
+            echo "- local checks: passed"
+            echo "- terraform module/env checks: passed"
+            echo "- apply: not executed"
+          } >> "$GITHUB_STEP_SUMMARY"

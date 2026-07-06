@@ -1,0 +1,82 @@
+name: terraform-quality-gates
+
+on:
+  pull_request:
+    paths:
+      - terraform/**
+      - policies/**
+      - checkov.yaml
+      - .github/workflows/terraform-quality-gates.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-quality-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TERRAFORM_DIR: terraform
+  TFLINT_CONFIG: terraform/.tflint.hcl
+
+jobs:
+  quality:
+    name: TFLint and Checkov
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v6
+
+      - name: Install Checkov
+        run: python -m pip install --upgrade checkov
+
+      - name: Initialize TFLint plugins
+        run: tflint --config "$GITHUB_WORKSPACE/$TFLINT_CONFIG" --init
+
+      - name: Run TFLint on Terraform roots
+        run: |
+          set -Eeuo pipefail
+          roots=(
+            terraform/backend-bootstrap
+            terraform/audit-trail
+            terraform/envs/dev
+            terraform/envs/stage
+            terraform/envs/prod
+            terraform/modules/network
+          )
+          for root in "${roots[@]}"; do
+            echo "==> tflint ${root}"
+            tflint --config "$GITHUB_WORKSPACE/$TFLINT_CONFIG" --chdir "$root" -f compact
+          done
+
+      - name: Run Checkov
+        run: checkov -d "$TERRAFORM_DIR" --framework terraform --config-file checkov.yaml --skip-download
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Terraform Quality Gates"
+            echo
+            echo "- TFLint: completed"
+            echo "- Checkov: completed"
+            echo "- AWS credentials: not used"
+            echo "- Apply: not executed"
+          } >> "$GITHUB_STEP_SUMMARY"
