@@ -32,13 +32,3 @@ output "web_tg_arn" {
   description = "ARN of the web target group"
   value       = module.network.web_tg_arn
 }
-
-output "tf_plan_role_arn" {
-  description = "IAM role ARN for GitHub Actions OIDC Terraform plan workflow"
-  value       = module.network.tf_plan_role_arn
-}
-
-output "tf_apply_role_arn" {
-  description = "IAM role ARN for GitHub Actions OIDC Terraform apply workflow"
-  value       = module.network.tf_apply_role_arn
-}

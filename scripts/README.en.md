@@ -44,9 +44,6 @@ AWS_REGION=eu-west-1 \
 TF_STATE_BUCKET=example-tfstate \
 TF_WEB_AMI_ID=ami-0123456789abcdef0 \
 TF_SSM_PROXY_AMI_ID=ami-0123456789abcdef0 \
-TF_GITHUB_OWNER=example-org \
-TF_GITHUB_REPO=terraform-aws-delivery-platform \
-TF_GITHUB_OIDC_PROVIDER_ARN=arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com \
 scripts/write-terraform-env-files.sh dev
 ```
 

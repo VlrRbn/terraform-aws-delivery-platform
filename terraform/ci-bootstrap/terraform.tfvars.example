@@ -1,0 +1,8 @@
+aws_region           = "eu-west-1"
+github_owner         = "REPLACE_WITH_GITHUB_OWNER"
+github_repo          = "terraform-aws-delivery-platform"
+github_branch        = "main"
+tf_state_bucket_name = "REPLACE_WITH_TFSTATE_BUCKET"
+
+# Set an existing provider ARN, or leave empty so this bootstrap root creates it.
+github_oidc_provider_arn = "arn:aws:iam::REPLACE_ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"

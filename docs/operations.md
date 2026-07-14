@@ -15,6 +15,10 @@
 
 Run `drift-check.yml` for the target environment. Exit code `2` means Terraform found drift or an unapplied diff. Review the drift artifact before applying anything.
 
+## Reviewed Replacement Or Destroy
+
+Destructive actions remain denied by default. For an approved replacement, commit a short-lived exception under `policies/approved-destroy/` using the schema in `policies/allow-destroy.example.json`, list exact Terraform addresses, and pass its repository-relative path through `allow_destroy_file`. The validated exception is copied into the review artifact; GitHub Environment approval is still required. Wildcards and expired records fail closed.
+
 ## Incident
 
 Use `runbooks/` before changing state manually. Save state snapshots and AWS reality checks before recovery actions.

@@ -89,16 +89,6 @@ output "ssm_vpc_endpoint_ids" {
   value       = { for k, ep in aws_vpc_endpoint.ssm : k => ep.id }
 }
 
-output "tf_plan_role_arn" {
-  description = "IAM role ARN for GitHub Actions OIDC Terraform plan workflow"
-  value       = aws_iam_role.github_actions_plan_role.arn
-}
-
-output "tf_apply_role_arn" {
-  description = "IAM role ARN for GitHub Actions OIDC Terraform apply workflow"
-  value       = aws_iam_role.github_actions_apply_role.arn
-}
-
 output "demo_api_token_parameter_name" {
   description = "SSM parameter name for terraform delivery platform. This exposes only metadata."
   value       = var.demo_api_token_parameter_name

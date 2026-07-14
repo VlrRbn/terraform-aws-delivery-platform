@@ -87,10 +87,10 @@ risk-decision.md
 Run from repo root:
 
 ```bash
-.policies/test-security-policy.sh
-.policies/test-cost-policy.sh
-.policies/test-risk-classifier.sh
-.policies/test-opa.sh
+./policies/test-security-policy.sh
+./policies/test-cost-policy.sh
+./policies/test-risk-classifier.sh
+./policies/test-opa.sh
 ```
 
 `test-opa.sh` is optional and requires `opa`.
@@ -101,8 +101,8 @@ Run one security fixture manually:
 
 ```bash
 OUT_DIR=/tmp/delivery-platform-security-policy \
-.policies/security-policy.sh \
-  .policies/tests/public-ingress-plan.json
+./policies/security-policy.sh \
+  ./policies/tests/public-ingress-plan.json
 ```
 
 Expected: `POLICY_DECISION=DENY`.
@@ -111,8 +111,8 @@ Run one cost fixture manually:
 
 ```bash
 OUT_DIR=/tmp/delivery-platform-cost-policy \
-.policies/cost-policy.sh \
-  .policies/tests/cost-high-asg-plan.json \
+./policies/cost-policy.sh \
+  ./policies/tests/cost-high-asg-plan.json \
   dev
 ```
 
@@ -125,8 +125,8 @@ POLICY_DIR=/tmp/delivery-platform-security-policy \
 COST_DIR=/tmp/delivery-platform-cost-policy \
 OUT_DIR=/tmp/delivery-platform-risk \
 REQUIRE_PROMOTION_EVIDENCE=false \
-.policies/risk-classifier.sh \
-  .policies/tests/cost-high-asg-plan.json \
+./policies/risk-classifier.sh \
+  ./policies/tests/cost-high-asg-plan.json \
   dev
 ```
 

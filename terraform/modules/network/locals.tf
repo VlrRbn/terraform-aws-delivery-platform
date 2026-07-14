@@ -23,13 +23,13 @@ locals {
     aws_subnet.private_subnet[key].id
   ]
 
-  private_endpoint_services = var.enable_ssm_vpc_endpoints ? toset([
+  private_endpoint_services = toset([
     "ssm",
     "ssmmessages",
     "ec2messages",
     "secretsmanager",
     "sts",
-  ]) : toset([])
+  ])
 
   required_tags = {
     Project     = var.project_name

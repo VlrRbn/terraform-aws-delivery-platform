@@ -56,7 +56,7 @@ resource "aws_security_group" "ssm_proxy" {
 
   # HTTPS to private interface endpoint ENIs.
   dynamic "egress" {
-    for_each = var.enable_ssm_vpc_endpoints ? [1] : []
+    for_each = [1]
     content {
       description = "HTTPS to SSM interface endpoints only"
       from_port   = 443
@@ -125,7 +125,6 @@ resource "aws_security_group_rule" "alb_http_from_ssm_proxy" {
 
 # Allow HTTPS from SSM proxy to private interface endpoints SG.
 resource "aws_security_group_rule" "ssm_endpoint_https_from_proxy" {
-  count                    = var.enable_ssm_vpc_endpoints ? 1 : 0
   type                     = "ingress"
   description              = "HTTPS from SSM Proxy SG"
   from_port                = 443
@@ -135,9 +134,9 @@ resource "aws_security_group_rule" "ssm_endpoint_https_from_proxy" {
   source_security_group_id = aws_security_group.ssm_proxy.id
 }
 
-# Optional: allow HTTPS from web SG to private interface endpoints when web SSM is enabled.
+# Allow web instances to read runtime secrets through private endpoints. When
+# enable_web_ssm is false they still lack SSM Session Manager IAM permissions.
 resource "aws_security_group_rule" "ssm_endpoint_https_from_web" {
-  count                    = var.enable_ssm_vpc_endpoints && var.enable_web_ssm ? 1 : 0
   type                     = "ingress"
   description              = "HTTPS from web SG"
   from_port                = 443

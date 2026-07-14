@@ -27,10 +27,6 @@ variables {
   private_subnet_cidrs = ["10.20.11.0/24", "10.20.12.0/24"]
   web_ami_id           = "ami-0123456789abcdef0"
   ssm_proxy_ami_id     = "ami-0123456789abcdef0"
-  github_owner         = "example-org"
-  github_repo          = "terraform-aws-delivery-platform"
-  tf_state_bucket_name = "vlrrbn-tfstate-123456789012-eu-west-1"
-  tf_state_key         = "delivery-platform/dev/full/terraform.tfstate"
 }
 
 run "bad_project_name_fails" {
@@ -165,14 +161,45 @@ run "bad_health_check_threshold_fails" {
   ]
 }
 
-run "bad_state_key_fails" {
+run "subnet_outside_vpc_fails" {
   command = plan
 
   variables {
-    tf_state_key = "/absolute/path/terraform.tfstate"
+    private_subnet_cidrs = ["10.99.11.0/24", "10.20.12.0/24"]
   }
 
   expect_failures = [
-    var.tf_state_key
+    var.private_subnet_cidrs
   ]
+}
+
+run "public_private_overlap_fails" {
+  command = plan
+
+  variables {
+    public_subnet_cidrs  = ["10.20.1.0/24", "10.20.2.0/24"]
+    private_subnet_cidrs = ["10.20.1.0/24", "10.20.12.0/24"]
+  }
+
+  expect_failures = [var.private_subnet_cidrs]
+}
+
+run "unsafe_refresh_percentage_fails" {
+  command = plan
+
+  variables {
+    asg_min_healthy_percentage = 49
+  }
+
+  expect_failures = [var.asg_min_healthy_percentage]
+}
+
+run "root_secret_path_fails" {
+  command = plan
+
+  variables {
+    demo_app_secret_name = "/"
+  }
+
+  expect_failures = [var.demo_app_secret_name]
 }

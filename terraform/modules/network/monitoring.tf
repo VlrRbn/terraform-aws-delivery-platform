@@ -26,7 +26,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_unhealthy" {
   period              = 60
   evaluation_periods  = 1
   threshold           = 0
-  treat_missing_data  = "notBreaching"
+  treat_missing_data  = "breaching"
 
   dimensions = {
     LoadBalancer = aws_lb.app.arn_suffix
@@ -77,7 +77,7 @@ resource "aws_cloudwatch_metric_alarm" "target_5xx_critical" {
   period              = 60
   evaluation_periods  = 2
   threshold           = 5
-  treat_missing_data  = "notBreaching"
+  treat_missing_data  = "breaching"
 
   dimensions = {
     LoadBalancer = aws_lb.app.arn_suffix

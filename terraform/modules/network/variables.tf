@@ -33,12 +33,16 @@ variable "environment" {
 
 variable "vpc_cidr" {
   type        = string
-  description = "CIDR block for the VPC"
+  description = "Canonical private /16 IPv4 CIDR block for the VPC"
   default     = "10.0.0.0/16"
 
   validation {
-    condition     = can(cidrhost(var.vpc_cidr, 0))
-    error_message = "vpc_cidr must be a valid IPv4 CIDR block."
+    condition = (
+      try(cidrnetmask(var.vpc_cidr), "") == "255.255.0.0" &&
+      try("${cidrhost(var.vpc_cidr, 0)}/16", "") == var.vpc_cidr &&
+      try(tonumber(split(".", cidrhost(var.vpc_cidr, 0))[0]), 0) == 10
+    )
+    error_message = "vpc_cidr must be a canonical private 10.0.0.0/8 subnet with a /16 prefix."
   }
 }
 
@@ -63,8 +67,13 @@ variable "public_subnet_cidrs" {
   }
 
   validation {
-    condition     = alltrue([for cidr in var.public_subnet_cidrs : can(cidrhost(cidr, 0))])
-    error_message = "Every public_subnet_cidrs entry must be a valid IPv4 CIDR block."
+    condition = alltrue([
+      for cidr in var.public_subnet_cidrs :
+      try(cidrnetmask(cidr), "") == "255.255.255.0" &&
+      try("${cidrhost(cidr, 0)}/24", "") == cidr &&
+      try(cidrsubnet(var.vpc_cidr, 8, tonumber(split(".", cidrhost(cidr, 0))[2])), "") == cidr
+    ])
+    error_message = "Every public subnet must be a canonical /24 contained by vpc_cidr."
   }
 
 }
@@ -90,8 +99,20 @@ variable "private_subnet_cidrs" {
   }
 
   validation {
-    condition     = alltrue([for cidr in var.private_subnet_cidrs : can(cidrhost(cidr, 0))])
-    error_message = "Every private_subnet_cidrs entry must be a valid IPv4 CIDR block."
+    condition = alltrue([
+      for cidr in var.private_subnet_cidrs :
+      try(cidrnetmask(cidr), "") == "255.255.255.0" &&
+      try("${cidrhost(cidr, 0)}/24", "") == cidr &&
+      try(cidrsubnet(var.vpc_cidr, 8, tonumber(split(".", cidrhost(cidr, 0))[2])), "") == cidr
+    ])
+    error_message = "Every private subnet must be a canonical /24 contained by vpc_cidr."
+  }
+
+  validation {
+    condition = length(distinct(concat(var.public_subnet_cidrs, var.private_subnet_cidrs))) == (
+      length(var.public_subnet_cidrs) + length(var.private_subnet_cidrs)
+    )
+    error_message = "Public and private subnet CIDRs must not overlap."
   }
 
 }
@@ -102,15 +123,9 @@ variable "instance_type_web" {
   default     = "t3.micro"
 }
 
-variable "enable_ssm_vpc_endpoints" {
-  type        = bool
-  description = "Create private interface VPC endpoints for Session Manager and runtime secret reads."
-  default     = true
-}
-
 variable "enable_web_ssm" {
   type        = bool
-  description = "If true, web instances can reach private interface endpoints (debug). If false, only ssm-proxy is allowed."
+  description = "Attach Session Manager permissions to web instances for controlled debugging. Runtime secret access uses a separate inline policy."
   default     = false
 }
 
@@ -144,6 +159,12 @@ variable "health_check_healthy_threshold" {
     condition     = var.health_check_healthy_threshold >= 2 && var.health_check_healthy_threshold <= 10
     error_message = "health_check_healthy_threshold must be between 2 and 10."
   }
+}
+
+variable "enable_alb_deletion_protection" {
+  type        = bool
+  description = "Protect the application load balancer from API deletion. Production roots must keep this enabled."
+  default     = false
 }
 
 variable "web_min_size" {
@@ -185,8 +206,8 @@ variable "asg_min_healthy_percentage" {
   default     = 50
 
   validation {
-    condition     = var.asg_min_healthy_percentage >= 0 && var.asg_min_healthy_percentage <= 100
-    error_message = "asg_min_healthy_percentage must be between 0 and 100."
+    condition     = var.asg_min_healthy_percentage >= 50 && var.asg_min_healthy_percentage <= 100
+    error_message = "asg_min_healthy_percentage must be between 50 and 100."
   }
 }
 
@@ -242,91 +263,17 @@ variable "common_tags" {
   }
 }
 
-variable "github_owner" {
-  description = "GitHub organization or username"
-  type        = string
-
-  validation {
-    condition     = can(regex("^[A-Za-z0-9-]+$", var.github_owner))
-    error_message = "github_owner must contain only letters, numbers, and hyphens."
-  }
-}
-
-variable "github_repo" {
-  description = "GitHub repository name"
-  type        = string
-
-  validation {
-    condition     = can(regex("^[A-Za-z0-9_.-]+$", var.github_repo))
-    error_message = "github_repo must contain only letters, numbers, dots, underscores, and hyphens."
-  }
-}
-
-variable "github_branch" {
-  description = "GitHub branch allowed to assume this role"
-  type        = string
-  default     = "main"
-
-  validation {
-    condition     = length(trimspace(var.github_branch)) > 0
-    error_message = "github_branch must not be empty."
-  }
-}
-
-variable "github_apply_environment" {
-  description = "GitHub Environment name allowed to assume the Terraform apply role"
-  type        = string
-  default     = "terraform-dev"
-
-  validation {
-    condition     = length(trimspace(var.github_apply_environment)) > 0
-    error_message = "github_apply_environment must not be empty."
-  }
-}
-
-variable "github_oidc_provider_arn" {
-  description = "Existing GitHub Actions OIDC provider ARN. Leave empty to create it in this state."
-  type        = string
-  default     = ""
-
-  validation {
-    condition = (
-      var.github_oidc_provider_arn == "" ||
-      can(regex("^arn:aws:iam::[0-9]{12}:oidc-provider/token\\.actions\\.githubusercontent\\.com$", var.github_oidc_provider_arn))
-    )
-    error_message = "github_oidc_provider_arn must be empty or a GitHub Actions OIDC provider ARN."
-  }
-}
-
-variable "tf_state_bucket_name" {
-  description = "Remote state S3 bucket used by the Terraform CI plan role"
-  type        = string
-
-  validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", var.tf_state_bucket_name))
-    error_message = "tf_state_bucket_name must look like a valid S3 bucket name."
-  }
-}
-
-variable "tf_state_key" {
-  description = "Remote state object key used by the Terraform CI plan role"
-  type        = string
-  default     = "delivery-platform/dev/full/terraform.tfstate"
-
-  validation {
-    condition     = length(trimspace(var.tf_state_key)) > 0 && !startswith(var.tf_state_key, "/")
-    error_message = "tf_state_key must be a non-empty relative S3 object key."
-  }
-}
-
 variable "demo_api_token_parameter_name" {
   type        = string
   description = "SSM SecureString name that the EC2 runtime role may read. Terraform should not read its plaintext value."
   default     = "/devops/delivery-platform/demo/api-token"
 
   validation {
-    condition     = startswith(var.demo_api_token_parameter_name, "/")
-    error_message = "demo_api_token_parameter_name must be an absolute SSM parameter path starting with /."
+    condition = (
+      can(regex("^/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+$", var.demo_api_token_parameter_name)) &&
+      !strcontains(var.demo_api_token_parameter_name, "//")
+    )
+    error_message = "demo_api_token_parameter_name must be a non-root absolute path with safe path segments."
   }
 }
 
@@ -336,7 +283,12 @@ variable "demo_app_secret_name" {
   default     = "/devops/delivery-platform/demo/app-secret"
 
   validation {
-    condition     = startswith(var.demo_app_secret_name, "/")
-    error_message = "demo_app_secret_name must be an absolute Secrets Manager path starting with /."
+    condition = (
+      can(regex("^/[A-Za-z0-9_+=.@-]+(/[A-Za-z0-9_+=.@-]+)+$", var.demo_app_secret_name)) &&
+      !strcontains(var.demo_app_secret_name, "//") &&
+      !strcontains(var.demo_app_secret_name, "?") &&
+      !strcontains(var.demo_app_secret_name, "*")
+    )
+    error_message = "demo_app_secret_name must be a non-root absolute path without wildcard characters."
   }
 }

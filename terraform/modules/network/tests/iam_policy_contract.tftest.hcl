@@ -1,40 +1,21 @@
 mock_provider "aws" {
   mock_data "aws_availability_zones" {
-    defaults = {
-      names = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
-    }
+    defaults = { names = ["eu-west-1a", "eu-west-1b", "eu-west-1c"] }
   }
-
   mock_data "aws_caller_identity" {
-    defaults = {
-      account_id = "123456789012"
-    }
+    defaults = { account_id = "123456789012" }
   }
-
-  mock_data "aws_iam_policy_document" {
-    defaults = {
-      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
-    }
-  }
-
   mock_resource "aws_lb" {
     defaults = {
       arn      = "arn:aws:elasticloadbalancing:eu-west-1:123456789012:loadbalancer/app/delivery-platform-app-alb/test"
       dns_name = "internal-delivery-platform-app-alb.example.local"
     }
   }
-
   mock_resource "aws_lb_target_group" {
-    defaults = {
-      arn = "arn:aws:elasticloadbalancing:eu-west-1:123456789012:targetgroup/delivery-platform-web-tg/test"
-    }
+    defaults = { arn = "arn:aws:elasticloadbalancing:eu-west-1:123456789012:targetgroup/delivery-platform-web-tg/test" }
   }
-
   mock_resource "aws_launch_template" {
-    defaults = {
-      id             = "lt-0123456789abcdef0"
-      latest_version = 1
-    }
+    defaults = { id = "lt-0123456789abcdef0", latest_version = 1 }
   }
 }
 
@@ -47,78 +28,40 @@ variables {
   private_subnet_cidrs = ["10.20.11.0/24", "10.20.12.0/24"]
   web_ami_id           = "ami-0123456789abcdef0"
   ssm_proxy_ami_id     = "ami-0123456789abcdef0"
-  github_owner         = "example-org"
-  github_repo          = "terraform-aws-delivery-platform"
-  tf_state_bucket_name = "vlrrbn-tfstate-123456789012-eu-west-1"
-  tf_state_key         = "delivery-platform/dev/full/terraform.tfstate"
 }
 
-run "iam_policy_contract" {
-  # Mocked apply makes computed policy documents available without creating real AWS resources.
+run "runtime_iam_boundary" {
   command = apply
 
   assert {
     condition = (
-      aws_iam_role.github_actions_plan_role.name == "delivery-platform-github-actions-plan-role" &&
-      aws_iam_role.github_actions_apply_role.name == "delivery-platform-github-actions-apply-role"
+      aws_iam_role.ssm_proxy.name == "delivery-platform-ec2-ssm-role" &&
+      aws_iam_role.web_runtime.name == "delivery-platform-web-runtime-role" &&
+      aws_iam_role.ssm_proxy.name != aws_iam_role.web_runtime.name
     )
-    error_message = "GitHub Actions IAM roles must keep explicit plan/apply names for clear GitHub variable mapping."
+    error_message = "SSM proxy and web runtime must use separate IAM roles."
   }
 
   assert {
     condition = (
-      !strcontains(aws_iam_role_policy.github_actions_apply_scoped.policy, "AdministratorAccess") &&
-      !strcontains(aws_iam_role_policy.github_actions_plan_read.policy, "ReadOnlyAccess")
+      !strcontains(aws_iam_role_policy.web_runtime_secret_read.policy, "secret:/*") &&
+      strcontains(aws_iam_role_policy.web_runtime_secret_read.policy, "secret:/devops/delivery-platform/demo/app-secret-??????") &&
+      strcontains(aws_iam_role_policy.web_runtime_secret_read.policy, "parameter/devops/delivery-platform/demo/api-token")
     )
-    error_message = "Terraform Delivery Platform must not reintroduce broad AWS managed policies into the normal plan/apply roles."
+    error_message = "Runtime secret policy must use exact parameter metadata and only the AWS six-character secret ARN suffix."
+  }
+
+  assert {
+    condition     = aws_iam_role_policy.web_runtime_secret_read.role == aws_iam_role.web_runtime.id
+    error_message = "Application secret reads must not be attached to the SSM proxy role."
   }
 
   assert {
     condition = (
-      strcontains(aws_iam_role_policy.github_actions_backend_access.policy, "delivery-platform/dev/full/terraform.tfstate") &&
-      strcontains(aws_iam_role_policy.github_actions_backend_access.policy, "delivery-platform/dev/full/terraform.tfstate.tflock") &&
-      !strcontains(aws_iam_role_policy.github_actions_backend_access.policy, "other-project/dev/full/terraform.tfstate")
+      endswith(aws_iam_role.ssm_proxy.permissions_boundary, "policy/delivery-platform-ssm-proxy-boundary") &&
+      endswith(aws_iam_role.web_runtime.permissions_boundary, "policy/delivery-platform-web-runtime-boundary") &&
+      aws_iam_role.ssm_proxy.permissions_boundary != aws_iam_role.web_runtime.permissions_boundary
     )
-    error_message = "Plan role backend policy must be scoped to the terraform delivery platform state key and lockfile only."
-  }
-
-  assert {
-    condition = (
-      strcontains(aws_iam_role_policy.github_actions_apply_scoped.policy, "delivery-platform/dev/full/terraform.tfstate") &&
-      strcontains(aws_iam_role_policy.github_actions_apply_scoped.policy, "delivery-platform/dev/full/terraform.tfstate.tflock") &&
-      !strcontains(aws_iam_role_policy.github_actions_apply_scoped.policy, "other-project/dev/full/terraform.tfstate")
-    )
-    error_message = "Apply role backend policy must be scoped to the terraform delivery platform state key and lockfile only."
-  }
-
-  assert {
-    condition = (
-      !contains(flatten([for statement in jsondecode(aws_iam_role_policy.github_actions_plan_read.policy).Statement : try(tolist(statement.Action), [statement.Action])]), "ec2:CreateVpc") &&
-      !contains(flatten([for statement in jsondecode(aws_iam_role_policy.github_actions_plan_read.policy).Statement : try(tolist(statement.Action), [statement.Action])]), "ec2:RunInstances") &&
-      !contains(flatten([for statement in jsondecode(aws_iam_role_policy.github_actions_plan_read.policy).Statement : try(tolist(statement.Action), [statement.Action])]), "iam:PassRole")
-    )
-    error_message = "Plan role policy must not include obvious mutation or PassRole permissions."
-  }
-
-  assert {
-    condition = anytrue([
-      for statement in jsondecode(aws_iam_role_policy.github_actions_apply_scoped.policy).Statement :
-      try(
-        statement.Sid == "PassOnlyLabRuntimeRolesToEc2" &&
-        statement.Action == "iam:PassRole" &&
-        statement.Resource == "arn:aws:iam::123456789012:role/delivery-platform-ec2-ssm-role" &&
-        statement.Condition.StringEquals["iam:PassedToService"] == "ec2.amazonaws.com",
-        false
-      )
-    ])
-    error_message = "Apply role PassRole must be restricted to the delivery-platform EC2 runtime role and ec2.amazonaws.com."
-  }
-
-  assert {
-    condition = (
-      strcontains(aws_iam_role.github_actions_apply_role.assume_role_policy, "repo:example-org/terraform-aws-delivery-platform:environment:terraform-dev") &&
-      !strcontains(aws_iam_role.github_actions_apply_role.assume_role_policy, "pull_request")
-    )
-    error_message = "Apply role trust must stay bound to the protected GitHub Environment subject, not PR jobs."
+    error_message = "Each runtime role must use its dedicated bootstrap-owned permissions boundary."
   }
 }

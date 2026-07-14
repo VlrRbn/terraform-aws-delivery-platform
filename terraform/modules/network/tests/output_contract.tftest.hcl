@@ -47,10 +47,6 @@ variables {
   private_subnet_cidrs = ["10.20.11.0/24", "10.20.12.0/24"]
   web_ami_id           = "ami-0123456789abcdef0"
   ssm_proxy_ami_id     = "ami-0123456789abcdef0"
-  github_owner         = "example-org"
-  github_repo          = "terraform-aws-delivery-platform"
-  tf_state_bucket_name = "vlrrbn-tfstate-123456789012-eu-west-1"
-  tf_state_key         = "delivery-platform/dev/full/terraform.tfstate"
 }
 
 run "stable_output_contract" {
@@ -77,8 +73,4 @@ run "stable_output_contract" {
     error_message = "ssm_vpc_endpoint_ids must stay a map keyed by AWS service name."
   }
 
-  assert {
-    condition     = can(output.tf_apply_role_arn)
-    error_message = "tf_apply_role_arn must stay available for the controlled apply workflow setup."
-  }
 }

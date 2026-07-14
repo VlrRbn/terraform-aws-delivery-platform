@@ -34,6 +34,11 @@ on:
         description: Type APPLY to allow exact-plan apply after approval
         required: true
         type: string
+      allow_destroy_file:
+        description: 'Reviewed exception under policies/approved-destroy/*.json, or none'
+        required: true
+        default: none
+        type: string
 
 permissions:
   contents: read
@@ -51,6 +56,7 @@ env:
   SOURCE_ENV: ${{ inputs.source_env }}
   SOURCE_WORKFLOW_RUN_URL: ${{ inputs.source_workflow_run_url }}
   CONFIRM_APPLY: ${{ inputs.confirm_apply }}
+  ALLOW_DESTROY_FILE_INPUT: ${{ inputs.allow_destroy_file }}
 
 concurrency:
   group: delivery-platform-promote-${{ inputs.target_env }}
@@ -84,6 +90,10 @@ jobs:
           fi
           if [[ ! "$RELEASE_ID" =~ ^[A-Za-z0-9._-]{1,80}$ ]]; then
             echo "release_id must contain only letters, numbers, dot, underscore, and dash; max length 80" >&2
+            exit 64
+          fi
+          if [[ "$ALLOW_DESTROY_FILE_INPUT" != "none" && ! "$ALLOW_DESTROY_FILE_INPUT" =~ ^policies/approved-destroy/[A-Za-z0-9._-]+\.json$ ]]; then
+            echo "allow_destroy_file must be none or a JSON file under policies/approved-destroy/" >&2
             exit 64
           fi
           if [[ "$TARGET_ENV" == "dev" && "$SOURCE_ENV" != "none" ]]; then
@@ -137,7 +147,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           missing=0
-          for name in TF_STATE_BUCKET TF_WEB_AMI_ID TF_SSM_PROXY_AMI_ID TF_GITHUB_OIDC_PROVIDER_ARN; do
+          for name in TF_STATE_BUCKET TF_WEB_AMI_ID TF_SSM_PROXY_AMI_ID; do
             value="${!name:-}"
             if [[ -z "$value" ]]; then
               echo "Missing GitHub variable: $name" >&2
@@ -149,7 +159,6 @@ jobs:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
           TF_WEB_AMI_ID: ${{ vars.TF_WEB_AMI_ID }}
           TF_SSM_PROXY_AMI_ID: ${{ vars.TF_SSM_PROXY_AMI_ID }}
-          TF_GITHUB_OIDC_PROVIDER_ARN: ${{ vars.TF_GITHUB_OIDC_PROVIDER_ARN }}
 
       - name: Verify source workflow run
         id: source_run
@@ -255,9 +264,6 @@ jobs:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
           TF_WEB_AMI_ID: ${{ vars.TF_WEB_AMI_ID }}
           TF_SSM_PROXY_AMI_ID: ${{ vars.TF_SSM_PROXY_AMI_ID }}
-          TF_GITHUB_OWNER: ${{ vars.TF_GITHUB_OWNER || github.repository_owner }}
-          TF_GITHUB_REPO: ${{ vars.TF_GITHUB_REPO || github.event.repository.name }}
-          TF_GITHUB_OIDC_PROVIDER_ARN: ${{ vars.TF_GITHUB_OIDC_PROVIDER_ARN }}
 
       - name: Terraform init and plan
         working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ inputs.target_env }}
@@ -283,8 +289,17 @@ jobs:
           root="${PROJECT_DIR}/terraform/envs/${TARGET_ENV}"
           mkdir -p "$root/policy-results" "$root/cost-policy-results" "$root/risk-results"
 
+          destroy_args=()
+          if [[ "$ALLOW_DESTROY_FILE_INPUT" != "none" ]]; then
+            if [[ ! -s "$PROJECT_DIR/$ALLOW_DESTROY_FILE_INPUT" ]]; then
+              echo "Reviewed destroy exception not found: $ALLOW_DESTROY_FILE_INPUT" >&2
+              exit 64
+            fi
+            destroy_args=(ALLOW_DESTROY_FILE="$PROJECT_DIR/$ALLOW_DESTROY_FILE_INPUT")
+          fi
+
           set +e
-          OUT_DIR="$root/policy-results" \
+          env "${destroy_args[@]}" OUT_DIR="$root/policy-results" \
             "$PROJECT_DIR/policies/security-policy.sh" "$root/tfplan.json" \
             2>&1 | tee "$root/policy-results/policy-output.txt"
           policy_ec=${PIPESTATUS[0]}
@@ -358,6 +373,9 @@ jobs:
           cp -r policy-results cost-policy-results risk-results review-artifact/
           [[ -f promotion-evidence.json ]] && cp promotion-evidence.json review-artifact/ || true
           [[ -f source-workflow-run-verification.json ]] && cp source-workflow-run-verification.json review-artifact/ || true
+          if [[ "$ALLOW_DESTROY_FILE_INPUT" != "none" ]]; then
+            cp "$PROJECT_DIR/$ALLOW_DESTROY_FILE_INPUT" review-artifact/allow-destroy.json
+          fi
           echo "artifact_name=$artifact" >> "$GITHUB_OUTPUT"
 
       - name: Upload review artifact before approval

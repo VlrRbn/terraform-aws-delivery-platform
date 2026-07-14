@@ -9,7 +9,7 @@ resource "aws_instance" "ssm_proxy" {
 
   # SSH not allowed
   associate_public_ip_address = false
-  iam_instance_profile        = aws_iam_instance_profile.ec2_ssm_instance_profile.name
+  iam_instance_profile        = aws_iam_instance_profile.ssm_proxy.name
 
   metadata_options {
     http_tokens                 = "required"

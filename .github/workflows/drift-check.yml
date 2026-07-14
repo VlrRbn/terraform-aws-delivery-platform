@@ -59,7 +59,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           missing=0
-          for name in TF_STATE_BUCKET TF_WEB_AMI_ID TF_SSM_PROXY_AMI_ID TF_GITHUB_OIDC_PROVIDER_ARN; do
+          for name in TF_STATE_BUCKET TF_WEB_AMI_ID TF_SSM_PROXY_AMI_ID; do
             value="${!name:-}"
             if [[ -z "$value" ]]; then
               echo "Missing GitHub variable: $name" >&2
@@ -71,7 +71,6 @@ jobs:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
           TF_WEB_AMI_ID: ${{ vars.TF_WEB_AMI_ID }}
           TF_SSM_PROXY_AMI_ID: ${{ vars.TF_SSM_PROXY_AMI_ID }}
-          TF_GITHUB_OIDC_PROVIDER_ARN: ${{ vars.TF_GITHUB_OIDC_PROVIDER_ARN }}
 
       - name: Select plan role
         id: role
@@ -100,9 +99,6 @@ jobs:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
           TF_WEB_AMI_ID: ${{ vars.TF_WEB_AMI_ID }}
           TF_SSM_PROXY_AMI_ID: ${{ vars.TF_SSM_PROXY_AMI_ID }}
-          TF_GITHUB_OWNER: ${{ vars.TF_GITHUB_OWNER || github.repository_owner }}
-          TF_GITHUB_REPO: ${{ vars.TF_GITHUB_REPO || github.event.repository.name }}
-          TF_GITHUB_OIDC_PROVIDER_ARN: ${{ vars.TF_GITHUB_OIDC_PROVIDER_ARN }}
 
       - name: Terraform init
         working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ steps.env.outputs.target_env }}

@@ -40,10 +40,6 @@ variables {
   private_subnet_cidrs = ["10.20.11.0/24", "10.20.12.0/24"]
   web_ami_id           = "ami-0123456789abcdef0"
   ssm_proxy_ami_id     = "ami-0123456789abcdef0"
-  github_owner         = "example-org"
-  github_repo          = "terraform-aws-delivery-platform"
-  tf_state_bucket_name = "vlrrbn-tfstate-123456789012-eu-west-1"
-  tf_state_key         = "delivery-platform/dev/full/terraform.tfstate"
 
   common_tags = {
     Owner = "devops-track"
@@ -66,5 +62,13 @@ run "valid_contract_inputs_plan" {
   assert {
     condition     = output.demo_app_secret_name == "/devops/delivery-platform/demo/app-secret"
     error_message = "The runtime Secrets Manager output must expose only the stable metadata name."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.alb_unhealthy.treat_missing_data == "breaching" &&
+      aws_cloudwatch_metric_alarm.target_5xx_critical.treat_missing_data == "breaching"
+    )
+    error_message = "Instance refresh rollback alarms must fail closed when metrics are missing."
   }
 }

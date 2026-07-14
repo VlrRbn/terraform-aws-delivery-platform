@@ -78,6 +78,16 @@ if [[ "$RUN_TERRAFORM" == "true" ]]; then
     terraform -chdir="$PROJECT_DIR/terraform/modules/network" \
     test -no-color
 
+  step "Running Terraform CI bootstrap init"
+  env TF_DATA_DIR=/tmp/delivery-platform-ci-bootstrap-test-data \
+    terraform -chdir="$PROJECT_DIR/terraform/ci-bootstrap" \
+    init -backend=false -input=false -no-color
+
+  step "Running Terraform CI bootstrap tests"
+  env TF_DATA_DIR=/tmp/delivery-platform-ci-bootstrap-test-data \
+    terraform -chdir="$PROJECT_DIR/terraform/ci-bootstrap" \
+    test -no-color
+
   for env_name in dev stage prod; do
     step "Running Terraform ${env_name} init"
     env TF_DATA_DIR="/tmp/delivery-platform-${env_name}-data" \
@@ -88,6 +98,13 @@ if [[ "$RUN_TERRAFORM" == "true" ]]; then
     env TF_DATA_DIR="/tmp/delivery-platform-${env_name}-data" \
       terraform -chdir="$PROJECT_DIR/terraform/envs/${env_name}" \
       validate -no-color
+
+    if [[ -d "$PROJECT_DIR/terraform/envs/${env_name}/tests" ]]; then
+      step "Running Terraform ${env_name} tests"
+      env TF_DATA_DIR="/tmp/delivery-platform-${env_name}-data" \
+        terraform -chdir="$PROJECT_DIR/terraform/envs/${env_name}" \
+        test -no-color
+    fi
   done
 fi
 

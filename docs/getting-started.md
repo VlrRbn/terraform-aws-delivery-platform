@@ -72,7 +72,29 @@ TF_STATE_BUCKET
 
 Do not commit local `tfplan`, state, or generated backend files.
 
-## 3. Build AMIs With Packer
+## 3. Bootstrap GitHub OIDC Roles
+
+CI identities have their own lifecycle and state. Create them before the first workflow plan; do not try to create these roles through themselves.
+
+```bash
+cd terraform/ci-bootstrap
+cp terraform.tfvars.example terraform.tfvars
+cp backend.hcl.example backend.hcl
+terraform init -backend-config=backend.hcl
+terraform plan -out=tfplan
+terraform apply tfplan
+terraform output plan_role_arns
+terraform output apply_role_arns
+terraform output runtime_permissions_boundary_arns
+```
+
+Run this bootstrap with the same reviewed local/admin bootstrap identity used for the state bucket. Copy plan outputs to repository variables and apply outputs to the corresponding GitHub Environment secrets. The runtime boundary output is evidence that the bootstrap-owned guardrails exist; environment workflows derive the same boundary names from their fixed project names.
+
+For an existing deployment, create the new bootstrap roles first and switch GitHub to their ARNs before planning environment roots. Environment states use `removed` blocks to forget legacy CI roles without deleting them. Review and remove those orphaned legacy roles separately only after the new workflow path is verified.
+
+The first environment migration also removes the old inline secret policy from the proxy and creates a separate web runtime role. The policy gate will therefore require a short-lived exception for the exact address `module.network.aws_iam_role_policy.runtime_secret_read`; inspect the real plan and approve only that address. Do not add CI roles or wildcard addresses to the exception.
+
+## 4. Build AMIs With Packer
 
 Build the web AMI:
 
@@ -99,7 +121,7 @@ TF_WEB_AMI_ID
 TF_SSM_PROXY_AMI_ID
 ```
 
-## 4. Configure GitHub Variables
+## 5. Configure GitHub Variables
 
 Use `examples/github-variables.md` as the checklist.
 
@@ -110,9 +132,6 @@ AWS_REGION
 TF_STATE_BUCKET
 TF_WEB_AMI_ID
 TF_SSM_PROXY_AMI_ID
-TF_GITHUB_OWNER
-TF_GITHUB_REPO
-TF_GITHUB_OIDC_PROVIDER_ARN
 TF_PLAN_ROLE_ARN_DEV
 TF_PLAN_ROLE_ARN_STAGE
 TF_PLAN_ROLE_ARN_PROD
@@ -134,7 +153,7 @@ TF_APPLY_ROLE_ARN_STAGE
 TF_APPLY_ROLE_ARN_PROD
 ```
 
-## 5. Configure GitHub Environment Approval
+## 6. Configure GitHub Environment Approval
 
 For `terraform-dev`, `terraform-stage`, and `terraform-prod`:
 
@@ -145,7 +164,7 @@ For `terraform-dev`, `terraform-stage`, and `terraform-prod`:
 
 For a solo portfolio repo, self-review may be unavoidable. Document that as a portfolio limitation, not as a production recommendation.
 
-## 6. First Dev Apply
+## 7. First Dev Apply
 
 Run `.github/workflows/promote.yml` manually:
 
@@ -155,13 +174,14 @@ release_id: demo-001
 source_env: none
 source_workflow_run_url: none
 confirm_apply: APPLY
+allow_destroy_file: none
 ```
 
 Review the generated plan artifact before approving the `terraform-dev` environment.
 
 The apply job must use the exact reviewed saved plan.
 
-## 7. Promote To Stage
+## 8. Promote To Stage
 
 After dev apply succeeds, copy the dev workflow run URL.
 
@@ -173,6 +193,7 @@ release_id: demo-001
 source_env: dev
 source_workflow_run_url: https://github.com/OWNER/REPO/actions/runs/RUN_ID
 confirm_apply: APPLY
+allow_destroy_file: none
 ```
 
 The workflow verifies:
@@ -182,7 +203,7 @@ The workflow verifies:
 - source apply artifact contains a promotable manifest;
 - release ID and source environment match.
 
-## 8. Promote To Prod
+## 9. Promote To Prod
 
 After stage apply succeeds, run:
 
@@ -192,11 +213,12 @@ release_id: demo-001
 source_env: stage
 source_workflow_run_url: https://github.com/OWNER/REPO/actions/runs/RUN_ID
 confirm_apply: APPLY
+allow_destroy_file: none
 ```
 
 Prod should have the strictest approval rules.
 
-## 9. Run Drift Checks
+## 10. Run Drift Checks
 
 Use `.github/workflows/drift-check.yml` for each environment:
 
@@ -208,7 +230,7 @@ prod
 
 Exit code `0` means clean. Exit code `2` means drift or unapplied diff and must be reviewed.
 
-## 10. Create The Optional Audit Trail
+## 11. Create The Optional Audit Trail
 
 The audit trail is intentionally separate from the app environments:
 
@@ -229,7 +251,7 @@ It creates:
 
 Keep `force_destroy_log_bucket = false` unless this is a disposable lab.
 
-## 11. Collect CloudTrail Evidence
+## 12. Collect CloudTrail Evidence
 
 After a workflow run:
 
@@ -245,7 +267,7 @@ After a workflow run:
 
 The snapshot is read-only. It collects AWS-side evidence such as caller identity, OIDC role assumption events, service events, denied events, trail configuration, and event selectors.
 
-## 12. Redact Evidence Before Sharing
+## 13. Redact Evidence Before Sharing
 
 Raw evidence can contain sensitive metadata.
 
@@ -263,7 +285,7 @@ docs/portfolio-evidence.md
 portfolio/
 ```
 
-## 13. Cleanup Order
+## 14. Cleanup Order
 
 Recommended cleanup:
 

@@ -7,12 +7,9 @@ AWS_REGION=eu-west-1
 TF_STATE_BUCKET=YOUR_TFSTATE_BUCKET
 TF_WEB_AMI_ID=ami-xxxxxxxxxxxxxxxxx
 TF_SSM_PROXY_AMI_ID=ami-xxxxxxxxxxxxxxxxx
-TF_GITHUB_OWNER=YOUR_GITHUB_OWNER
-TF_GITHUB_REPO=terraform-aws-delivery-platform
-TF_GITHUB_OIDC_PROVIDER_ARN=arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com
-TF_PLAN_ROLE_ARN_DEV=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-dev-github-actions-plan-role
-TF_PLAN_ROLE_ARN_STAGE=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-stage-github-actions-plan-role
-TF_PLAN_ROLE_ARN_PROD=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-prod-github-actions-plan-role
+TF_PLAN_ROLE_ARN_DEV=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-ci-dev-plan
+TF_PLAN_ROLE_ARN_STAGE=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-ci-stage-plan
+TF_PLAN_ROLE_ARN_PROD=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-ci-prod-plan
 ```
 
 ## GitHub Environments
@@ -28,7 +25,9 @@ terraform-prod
 Environment secrets:
 
 ```text
-TF_APPLY_ROLE_ARN_DEV=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-dev-github-actions-apply-role
-TF_APPLY_ROLE_ARN_STAGE=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-stage-github-actions-apply-role
-TF_APPLY_ROLE_ARN_PROD=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-prod-github-actions-apply-role
+TF_APPLY_ROLE_ARN_DEV=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-ci-dev-apply
+TF_APPLY_ROLE_ARN_STAGE=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-ci-stage-apply
+TF_APPLY_ROLE_ARN_PROD=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-ci-prod-apply
 ```
+
+The role ARNs come from `terraform/ci-bootstrap` outputs. GitHub owner/repository and OIDC provider configuration are inputs to that bootstrap root, not repository variables consumed by promotion workflows.

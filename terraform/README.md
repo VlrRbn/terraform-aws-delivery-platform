@@ -7,9 +7,10 @@ This directory contains multiple Terraform roots. They are intentionally separat
 | Root | Purpose | Notes |
 | --- | --- | --- |
 | `backend-bootstrap/` | Creates the S3 state bucket used by the delivery platform | Local/admin bootstrap step; protected with `prevent_destroy` where appropriate |
+| `ci-bootstrap/` | Creates GitHub OIDC plan/apply roles and runtime permissions boundaries in a dedicated remote state | Local/admin bootstrap step; outputs populate GitHub variables and environment secrets |
 | `envs/dev/` | Development environment | Lower capacity, easier debugging |
 | `envs/stage/` | Promotion/pre-production environment | Mirrors production flow with smaller blast radius |
-| `envs/prod/` | Production-style environment | Stricter ASG refresh and no direct web SSM by default |
+| `envs/prod/` | Production-style environment | Stricter ASG refresh, ALB deletion protection, and no direct web SSM by default |
 | `audit-trail/` | CloudTrail log bucket/trail and optional S3 state data events | Separate from app envs so audit lifecycle is independent |
 | `modules/network/` | Shared infrastructure module | Used by dev/stage/prod roots |
 
@@ -17,11 +18,14 @@ This directory contains multiple Terraform roots. They are intentionally separat
 
 ```text
 1. backend-bootstrap
-2. envs/dev
-3. envs/stage
-4. envs/prod
-5. audit-trail
+2. ci-bootstrap
+3. envs/dev
+4. envs/stage
+5. envs/prod
+6. audit-trail
 ```
+
+Never bootstrap `ci-bootstrap/` through a role that it is creating. Run its reviewed saved plan with the same local/admin bootstrap identity used for the backend, then configure GitHub with its outputs.
 
 `audit-trail/` can be created earlier if you want to capture events from the first environment applies, but it needs the state bucket name/prefixes to configure S3 data event selectors.
 

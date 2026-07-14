@@ -38,11 +38,6 @@ variable "common_tags" {
   default = {}
 }
 
-variable "enable_ssm_vpc_endpoints" {
-  type    = bool
-  default = true
-}
-
 variable "enable_web_ssm" {
   type    = bool
   default = false
@@ -67,6 +62,11 @@ variable "web_desired_capacity" {
 variable "asg_min_healthy_percentage" {
   type    = number
   default = 50
+
+  validation {
+    condition     = var.asg_min_healthy_percentage >= 50
+    error_message = "dev requires asg_min_healthy_percentage >= 50."
+  }
 }
 
 variable "asg_instance_warmup_seconds" {
@@ -89,34 +89,12 @@ variable "health_check_healthy_threshold" {
   default = 2
 }
 
+variable "enable_alb_deletion_protection" {
+  type    = bool
+  default = false
+}
+
 variable "ssm_proxy_ami_id" {
-  type = string
-}
-
-variable "github_owner" {
-  type = string
-}
-
-variable "github_repo" {
-  type = string
-}
-
-variable "github_branch" {
-  type    = string
-  default = "main"
-}
-
-variable "github_apply_environment" {
-  type = string
-}
-
-variable "github_oidc_provider_arn" {
-  description = "Existing GitHub Actions OIDC provider ARN. Leave empty only when this env should create it."
-  type        = string
-  default     = ""
-}
-
-variable "tf_state_bucket_name" {
   type = string
 }
 
@@ -131,8 +109,18 @@ variable "tf_state_key" {
 
 variable "demo_api_token_parameter_name" {
   type = string
+
+  validation {
+    condition     = var.demo_api_token_parameter_name == "/devops/delivery-platform/dev/demo/api-token"
+    error_message = "dev runtime boundary requires the standard dev demo API token path."
+  }
 }
 
 variable "demo_app_secret_name" {
   type = string
+
+  validation {
+    condition     = var.demo_app_secret_name == "/devops/delivery-platform/dev/demo/app-secret"
+    error_message = "dev runtime boundary requires the standard dev demo app secret path."
+  }
 }

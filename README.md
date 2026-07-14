@@ -47,6 +47,7 @@ This repository demonstrates how to move Terraform changes through review, polic
 └── terraform/
     ├── audit-trail/
     ├── backend-bootstrap/
+    ├── ci-bootstrap/
     ├── envs/
     │   ├── dev/
     │   ├── stage/
@@ -102,9 +103,6 @@ AWS_REGION
 TF_STATE_BUCKET
 TF_WEB_AMI_ID
 TF_SSM_PROXY_AMI_ID
-TF_GITHUB_OIDC_PROVIDER_ARN
-TF_GITHUB_OWNER
-TF_GITHUB_REPO
 TF_PLAN_ROLE_ARN_DEV
 TF_PLAN_ROLE_ARN_STAGE
 TF_PLAN_ROLE_ARN_PROD
@@ -117,6 +115,8 @@ TF_APPLY_ROLE_ARN_DEV
 TF_APPLY_ROLE_ARN_STAGE
 TF_APPLY_ROLE_ARN_PROD
 ```
+
+GitHub owner/repository and the OIDC provider ARN are bootstrap inputs in `terraform/ci-bootstrap/`; workflows do not accept them as mutable repository variables.
 
 ## Safe Local Checks
 

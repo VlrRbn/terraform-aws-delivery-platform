@@ -106,7 +106,7 @@ Trust policy check:
 
 ```bash
 aws iam get-role \
-  --role-name delivery-platform-dev-github-actions-apply-role \
+  --role-name delivery-platform-ci-dev-apply \
   --query 'Role.AssumeRolePolicyDocument' \
   --output json
 ```

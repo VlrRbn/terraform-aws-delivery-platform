@@ -55,6 +55,7 @@ jobs:
           set -Eeuo pipefail
           roots=(
             terraform/backend-bootstrap
+            terraform/ci-bootstrap
             terraform/audit-trail
             terraform/envs/dev
             terraform/envs/stage

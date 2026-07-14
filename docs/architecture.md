@@ -28,4 +28,4 @@ The same `network` module is used in every environment. Differences are expresse
 
 ## Delivery Control Plane
 
-GitHub Actions uses OIDC to assume AWS roles. The plan role can read and build plans. The apply role is gated by GitHub Environment approval and applies only the reviewed saved plan.
+GitHub Actions uses OIDC to assume roles owned by the independent `terraform/ci-bootstrap` state. The branch-bound plan role can read infrastructure and the state object but can mutate only the S3 lockfile. The apply role is gated by GitHub Environment approval and applies only the reviewed saved plan.

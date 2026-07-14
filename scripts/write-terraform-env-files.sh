@@ -15,12 +15,9 @@ set -Eeuo pipefail
 # - TF_STATE_BUCKET
 # - TF_WEB_AMI_ID
 # - TF_SSM_PROXY_AMI_ID
-# - TF_GITHUB_OIDC_PROVIDER_ARN
 #
 # Optional environment variables:
 # - AWS_REGION, default eu-west-1
-# - TF_GITHUB_OWNER, default parsed from GITHUB_REPOSITORY
-# - TF_GITHUB_REPO, default parsed from GITHUB_REPOSITORY
 # - TF_ENV_DIR, default terraform/envs/<target_env>
 
 usage() {
@@ -33,9 +30,6 @@ Example:
   TF_STATE_BUCKET=my-tfstate-bucket \
   TF_WEB_AMI_ID=ami-0123456789abcdef0 \
   TF_SSM_PROXY_AMI_ID=ami-0123456789abcdef0 \
-  TF_GITHUB_OWNER=example-org \
-  TF_GITHUB_REPO=terraform-aws-delivery-platform \
-  TF_GITHUB_OIDC_PROVIDER_ARN=arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com \
   write-terraform-env-files.sh dev
 USAGE
 }
@@ -55,7 +49,6 @@ AWS_REGION="${AWS_REGION:-eu-west-1}"
 TF_STATE_BUCKET="${TF_STATE_BUCKET:-}"
 TF_WEB_AMI_ID="${TF_WEB_AMI_ID:-}"
 TF_SSM_PROXY_AMI_ID="${TF_SSM_PROXY_AMI_ID:-}"
-TF_GITHUB_OIDC_PROVIDER_ARN="${TF_GITHUB_OIDC_PROVIDER_ARN:-}"
 
 if [[ -z "$TF_STATE_BUCKET" ]]; then
   echo "TF_STATE_BUCKET is required" >&2
@@ -69,25 +62,6 @@ if [[ -z "$TF_SSM_PROXY_AMI_ID" ]]; then
   echo "TF_SSM_PROXY_AMI_ID is required" >&2
   exit 64
 fi
-if [[ -z "$TF_GITHUB_OIDC_PROVIDER_ARN" ]]; then
-  echo "TF_GITHUB_OIDC_PROVIDER_ARN is required" >&2
-  exit 64
-fi
-
-# GitHub Actions exposes owner/repo as GITHUB_REPOSITORY=owner/repo. Keep explicit variables available so
-# local drills and forks can override the values cleanly.
-github_repository="${GITHUB_REPOSITORY:-}"
-if [[ -z "${TF_GITHUB_OWNER:-}" ]]; then
-  TF_GITHUB_OWNER="${github_repository%%/*}"
-fi
-if [[ -z "${TF_GITHUB_REPO:-}" ]]; then
-  TF_GITHUB_REPO="${github_repository#*/}"
-fi
-if [[ -z "$TF_GITHUB_OWNER" || -z "$TF_GITHUB_REPO" || "$TF_GITHUB_OWNER" == "$github_repository" || "$TF_GITHUB_REPO" == "$github_repository" ]]; then
-  echo "TF_GITHUB_OWNER and TF_GITHUB_REPO are required when GITHUB_REPOSITORY is not set to owner/repo" >&2
-  exit 64
-fi
-
 case "$TARGET_ENV" in
   dev)
     project_name="delivery-platform-dev"
@@ -103,6 +77,7 @@ case "$TARGET_ENV" in
     asg_checkpoint_delay_seconds=180
     tg_slow_start_seconds=60
     health_check_healthy_threshold=2
+    enable_alb_deletion_protection=false
     criticality="low"
     ;;
   stage)
@@ -119,6 +94,7 @@ case "$TARGET_ENV" in
     asg_checkpoint_delay_seconds=360
     tg_slow_start_seconds=60
     health_check_healthy_threshold=2
+    enable_alb_deletion_protection=false
     criticality="medium"
     ;;
   prod)
@@ -135,6 +111,7 @@ case "$TARGET_ENV" in
     asg_checkpoint_delay_seconds=600
     tg_slow_start_seconds=120
     health_check_healthy_threshold=3
+    enable_alb_deletion_protection=true
     criticality="high"
     ;;
 esac
@@ -158,8 +135,7 @@ vpc_cidr             = "${vpc_cidr}"
 public_subnet_cidrs  = ${public_subnets}
 private_subnet_cidrs = ${private_subnets}
 
-enable_ssm_vpc_endpoints = true
-enable_web_ssm           = ${enable_web_ssm}
+enable_web_ssm = ${enable_web_ssm}
 
 web_ami_id       = "${TF_WEB_AMI_ID}"
 ssm_proxy_ami_id = "${TF_SSM_PROXY_AMI_ID}"
@@ -173,16 +149,10 @@ asg_instance_warmup_seconds    = ${asg_instance_warmup_seconds}
 asg_checkpoint_delay_seconds   = ${asg_checkpoint_delay_seconds}
 tg_slow_start_seconds          = ${tg_slow_start_seconds}
 health_check_healthy_threshold = ${health_check_healthy_threshold}
+enable_alb_deletion_protection = ${enable_alb_deletion_protection}
 instance_type_web              = "t3.micro"
 
-github_owner             = "${TF_GITHUB_OWNER}"
-github_repo              = "${TF_GITHUB_REPO}"
-github_branch            = "main"
-github_apply_environment = "terraform-${TARGET_ENV}"
-github_oidc_provider_arn = "${TF_GITHUB_OIDC_PROVIDER_ARN}"
-
-tf_state_bucket_name = "${TF_STATE_BUCKET}"
-tf_state_key         = "delivery-platform/${TARGET_ENV}/full/terraform.tfstate"
+tf_state_key = "delivery-platform/${TARGET_ENV}/full/terraform.tfstate"
 
 demo_api_token_parameter_name = "/devops/delivery-platform/${TARGET_ENV}/demo/api-token"
 demo_app_secret_name          = "/devops/delivery-platform/${TARGET_ENV}/demo/app-secret"

@@ -17,12 +17,8 @@ resource "aws_launch_template" "web" {
     security_groups             = [aws_security_group.web.id]
   }
 
-  dynamic "iam_instance_profile" {
-    for_each = var.enable_web_ssm ? [1] : []
-    content {
-      name = aws_iam_instance_profile.ec2_ssm_instance_profile.name
-    }
-
+  iam_instance_profile {
+    name = aws_iam_instance_profile.web_runtime.name
   }
 
   metadata_options {

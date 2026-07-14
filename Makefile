@@ -57,7 +57,7 @@ validate:
 
 tflint:
 	TFLINT_PLUGIN_DIR='$(TFLINT_PLUGIN_DIR)' tflint --config '$(TFLINT_CONFIG)' --init
-	@for root in terraform/backend-bootstrap terraform/audit-trail terraform/envs/dev terraform/envs/stage terraform/envs/prod terraform/modules/network; do \
+	@for root in terraform/backend-bootstrap terraform/ci-bootstrap terraform/audit-trail terraform/envs/dev terraform/envs/stage terraform/envs/prod terraform/modules/network; do \
 	  echo "==> tflint $$root"; \
 	  TFLINT_PLUGIN_DIR='$(TFLINT_PLUGIN_DIR)' tflint --config '$(TFLINT_CONFIG)' --chdir "$$root" -f compact; \
 	done
@@ -71,7 +71,7 @@ yaml:
 redaction-smoke:
 	@tmp_in="$$(mktemp)"; tmp_out="$$(mktemp)"; \
 	printf '%s\n' \
-	  'arn:aws:iam::123456789012:role/delivery-platform-prod-github-actions-apply-role' \
+	  'arn:aws:iam::123456789012:role/delivery-platform-ci-prod-apply' \
 	  'Instance i-0123456789abcdef0 from 10.20.11.42 reached internal-demo.eu-west-1.elb.amazonaws.com' \
 	  > "$$tmp_in"; \
 	./scripts/redact-evidence.sh "$$tmp_in" "$$tmp_out" >/dev/null; \
