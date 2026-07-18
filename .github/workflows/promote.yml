@@ -265,6 +265,11 @@ jobs:
           TF_WEB_AMI_ID: ${{ vars.TF_WEB_AMI_ID }}
           TF_SSM_PROXY_AMI_ID: ${{ vars.TF_SSM_PROXY_AMI_ID }}
 
+      - name: Validate environment and backend boundaries
+        run: ${{ env.PROJECT_DIR }}/scripts/validate-terraform-env-config.sh "$TARGET_ENV"
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+
       - name: Terraform init and plan
         working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ inputs.target_env }}
         run: |
@@ -446,6 +451,11 @@ jobs:
         run: |
           cp /tmp/delivery-platform-review-artifact/backend.hcl ./backend.hcl
           cp /tmp/delivery-platform-review-artifact/terraform.auto.tfvars ./terraform.auto.tfvars
+
+      - name: Validate approved environment and backend boundaries
+        run: ${{ env.PROJECT_DIR }}/scripts/validate-terraform-env-config.sh "${{ needs.plan.outputs.target_env }}"
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
 
       - name: Terraform init
         working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}

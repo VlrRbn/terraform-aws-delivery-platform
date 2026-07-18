@@ -1,10 +1,20 @@
 variable "aws_region" {
   type    = string
   default = "eu-west-1"
+
+  validation {
+    condition     = var.aws_region == "eu-west-1"
+    error_message = "The stage environment is pinned to aws_region = eu-west-1."
+  }
 }
 
 variable "project_name" {
   type = string
+
+  validation {
+    condition     = var.project_name == "delivery-platform-stage"
+    error_message = "The stage root accepts only project_name = delivery-platform-stage."
+  }
 }
 
 variable "environment" {

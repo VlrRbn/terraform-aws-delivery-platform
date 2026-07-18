@@ -1,7 +1,7 @@
 {
   "reason": "Example only. Do not use casually.",
   "approved_by": "CHANGE-REVIEWER",
-  "expires": "2099-12-31",
+  "expires": "REPLACE_WITH_UTC_DATE_WITHIN_7_DAYS",
   "allowed_addresses": [
     "module.network.aws_cloudwatch_metric_alarm.old_alarm"
   ]

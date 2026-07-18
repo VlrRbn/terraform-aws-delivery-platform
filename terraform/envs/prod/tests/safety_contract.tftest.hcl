@@ -35,6 +35,35 @@ run "prod_rejects_disabled_alb_deletion_protection" {
   expect_failures = [var.enable_alb_deletion_protection]
 }
 
+run "prod_allows_explicit_two_step_teardown_mode" {
+  command = plan
+
+  variables {
+    enable_alb_deletion_protection = false
+    prod_teardown_mode             = true
+  }
+}
+
+run "prod_rejects_wrong_region" {
+  command = plan
+
+  variables {
+    aws_region = "us-east-1"
+  }
+
+  expect_failures = [var.aws_region]
+}
+
+run "prod_rejects_wrong_project_name" {
+  command = plan
+
+  variables {
+    project_name = "delivery-platform-stage"
+  }
+
+  expect_failures = [var.project_name]
+}
+
 run "prod_rejects_secret_path_outside_runtime_boundary" {
   command = plan
 

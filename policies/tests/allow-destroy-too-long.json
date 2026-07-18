@@ -1,0 +1,8 @@
+{
+  "reason": "Negative test for an approval that lives too long.",
+  "approved_by": "CHANGE-TEST",
+  "expires": "2099-12-31",
+  "allowed_addresses": [
+    "module.network.aws_cloudwatch_metric_alarm.old_alarm"
+  ]
+}

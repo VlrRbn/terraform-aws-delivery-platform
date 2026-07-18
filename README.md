@@ -108,13 +108,16 @@ TF_PLAN_ROLE_ARN_STAGE
 TF_PLAN_ROLE_ARN_PROD
 ```
 
-Set these as GitHub Environment secrets for `terraform-dev`, `terraform-stage`, and `terraform-prod`:
+Set only the matching GitHub Environment secret in each environment:
 
 ```text
-TF_APPLY_ROLE_ARN_DEV
-TF_APPLY_ROLE_ARN_STAGE
-TF_APPLY_ROLE_ARN_PROD
+terraform-dev:   TF_APPLY_ROLE_ARN_DEV
+terraform-stage: TF_APPLY_ROLE_ARN_STAGE
+terraform-prod:  TF_APPLY_ROLE_ARN_PROD
 ```
+
+Required reviewers and protected-branch deployment rules must be configured on
+all three environments; otherwise the apply job does not wait for manual approval.
 
 GitHub owner/repository and the OIDC provider ARN are bootstrap inputs in `terraform/ci-bootstrap/`; workflows do not accept them as mutable repository variables.
 

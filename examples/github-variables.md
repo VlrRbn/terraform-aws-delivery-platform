@@ -25,9 +25,12 @@ terraform-prod
 Environment secrets:
 
 ```text
-TF_APPLY_ROLE_ARN_DEV=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-ci-dev-apply
-TF_APPLY_ROLE_ARN_STAGE=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-ci-stage-apply
-TF_APPLY_ROLE_ARN_PROD=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-ci-prod-apply
+terraform-dev:   TF_APPLY_ROLE_ARN_DEV=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-ci-dev-apply
+terraform-stage: TF_APPLY_ROLE_ARN_STAGE=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-ci-stage-apply
+terraform-prod:  TF_APPLY_ROLE_ARN_PROD=arn:aws:iam::ACCOUNT_ID:role/delivery-platform-ci-prod-apply
 ```
+
+Configure required reviewers and restrict deployments to the protected `main`
+branch. Merely creating a GitHub Environment does not add a manual approval gate.
 
 The role ARNs come from `terraform/ci-bootstrap` outputs. GitHub owner/repository and OIDC provider configuration are inputs to that bootstrap root, not repository variables consumed by promotion workflows.

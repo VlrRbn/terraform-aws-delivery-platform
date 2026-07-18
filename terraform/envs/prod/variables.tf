@@ -1,10 +1,20 @@
 variable "aws_region" {
   type    = string
   default = "eu-west-1"
+
+  validation {
+    condition     = var.aws_region == "eu-west-1"
+    error_message = "The prod environment is pinned to aws_region = eu-west-1."
+  }
 }
 
 variable "project_name" {
   type = string
+
+  validation {
+    condition     = var.project_name == "delivery-platform-prod"
+    error_message = "The prod root accepts only project_name = delivery-platform-prod."
+  }
 }
 
 variable "environment" {
@@ -94,9 +104,15 @@ variable "enable_alb_deletion_protection" {
   default = true
 
   validation {
-    condition     = var.enable_alb_deletion_protection
-    error_message = "prod requires enable_alb_deletion_protection = true."
+    condition     = var.enable_alb_deletion_protection || var.prod_teardown_mode
+    error_message = "prod requires ALB deletion protection unless prod_teardown_mode is explicitly enabled for a reviewed two-step teardown."
   }
+}
+
+variable "prod_teardown_mode" {
+  type        = bool
+  description = "Explicitly allow a reviewed apply to disable ALB deletion protection before a separate prod destroy plan."
+  default     = false
 }
 
 variable "ssm_proxy_ami_id" {

@@ -100,6 +100,11 @@ jobs:
           TF_WEB_AMI_ID: ${{ vars.TF_WEB_AMI_ID }}
           TF_SSM_PROXY_AMI_ID: ${{ vars.TF_SSM_PROXY_AMI_ID }}
 
+      - name: Validate environment and backend boundaries
+        run: ${{ env.PROJECT_DIR }}/scripts/validate-terraform-env-config.sh "${{ steps.env.outputs.target_env }}"
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+
       - name: Terraform init
         working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ steps.env.outputs.target_env }}
         run: terraform init -backend-config=backend.hcl -input=false -no-color

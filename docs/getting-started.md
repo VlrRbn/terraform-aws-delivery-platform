@@ -137,6 +137,10 @@ TF_PLAN_ROLE_ARN_STAGE
 TF_PLAN_ROLE_ARN_PROD
 ```
 
+`AWS_REGION` is a checked contract and must remain `eu-west-1`. Changing it is
+not a supported migration path because it can make an existing environment look
+absent and trigger unexpected recreation.
+
 GitHub Environments:
 
 ```text
@@ -148,18 +152,18 @@ terraform-prod
 Environment secrets:
 
 ```text
-TF_APPLY_ROLE_ARN_DEV
-TF_APPLY_ROLE_ARN_STAGE
-TF_APPLY_ROLE_ARN_PROD
+terraform-dev:   TF_APPLY_ROLE_ARN_DEV
+terraform-stage: TF_APPLY_ROLE_ARN_STAGE
+terraform-prod:  TF_APPLY_ROLE_ARN_PROD
 ```
 
 ## 6. Configure GitHub Environment Approval
 
 For `terraform-dev`, `terraform-stage`, and `terraform-prod`:
 
-- add required reviewers if you want a manual approval gate;
+- add required reviewers; without them the workflow does not wait for manual approval;
 - disable self-review if this is a team repo;
-- restrict deployment branches if needed;
+- restrict deployment branches to the protected `main` branch;
 - store the apply role ARN as an environment secret.
 
 For a solo portfolio repo, self-review may be unavoidable. Document that as a portfolio limitation, not as a production recommendation.
@@ -292,6 +296,21 @@ Recommended cleanup:
 ```text
 prod -> stage -> dev -> audit-trail -> backend-bootstrap
 ```
+
+Prod cleanup is intentionally two-step. A direct destroy can remove dependent
+resources before AWS rejects deletion of the protected ALB. First create and
+review a normal saved plan with both values below, then apply only that saved
+plan to disable ALB deletion protection:
+
+```hcl
+enable_alb_deletion_protection = false
+prod_teardown_mode             = true
+```
+
+Only after that apply succeeds, create a fresh destroy plan and review its exact
+addresses through the destructive-change exception flow. Do not use
+`prod_teardown_mode` as a way to run destroy directly against an ALB whose
+deletion protection is still enabled.
 
 Do not destroy the audit trail before collecting evidence you still need.
 

@@ -64,7 +64,7 @@ fi
 # This is intentionally strict:
 # - exact Terraform addresses only;
 # - reason and approver are required;
-# - expiry must be a real calendar date and must not be in the past.
+# - expiry must be a real calendar date between today and seven days from now.
 if [[ -n "$ALLOW_DESTROY_FILE" ]]; then
   if [[ ! -f "$ALLOW_DESTROY_FILE" ]]; then
     echo "ALLOW_DESTROY_FILE not found: $ALLOW_DESTROY_FILE" >&2
@@ -96,6 +96,12 @@ if [[ -n "$ALLOW_DESTROY_FILE" ]]; then
     echo "ALLOW_DESTROY_FILE is expired: expires=$EXPIRES today_utc=$TODAY_UTC" >&2
     exit 1
   fi
+
+  MAX_EXPIRES="$(date -u -d "${TODAY_UTC} + 7 days" +%F)"
+  if [[ "$EXPIRES" > "$MAX_EXPIRES" ]]; then
+    echo "ALLOW_DESTROY_FILE expires too far in the future: expires=$EXPIRES max=$MAX_EXPIRES" >&2
+    exit 1
+  fi
 fi
 
 # Terraform replacements contain a delete action, so `index("delete")` is the safest coarse guard.
@@ -115,6 +121,17 @@ jq '
 ' "$PLAN_JSON" > "$OUT_DIR/destructive.json"
 
 if [[ -n "$ALLOW_DESTROY_FILE" ]]; then
+  # Reject reusable or mistyped approvals. Every approved address must be a
+  # destructive address in this exact plan; unapproved destructive addresses
+  # are still denied below.
+  if ! jq -e -s '
+    (.[0] | map(.address)) as $destructive
+    | all(.[1].allowed_addresses[]; . as $address | ($destructive | index($address)) != null)
+  ' "$OUT_DIR/destructive.json" "$ALLOW_DESTROY_FILE" >/dev/null; then
+    echo "ALLOW_DESTROY_FILE contains an address that is not destructive in this plan" >&2
+    exit 1
+  fi
+
   # Keep both raw destructive findings and effective unapproved findings.
   # The raw file is evidence; the effective file is what actually contributes to DENY.
   jq -s '

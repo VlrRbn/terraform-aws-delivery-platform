@@ -49,6 +49,7 @@ AWS_REGION="${AWS_REGION:-eu-west-1}"
 TF_STATE_BUCKET="${TF_STATE_BUCKET:-}"
 TF_WEB_AMI_ID="${TF_WEB_AMI_ID:-}"
 TF_SSM_PROXY_AMI_ID="${TF_SSM_PROXY_AMI_ID:-}"
+prod_teardown_mode_line=""
 
 if [[ -z "$TF_STATE_BUCKET" ]]; then
   echo "TF_STATE_BUCKET is required" >&2
@@ -112,6 +113,7 @@ case "$TARGET_ENV" in
     tg_slow_start_seconds=120
     health_check_healthy_threshold=3
     enable_alb_deletion_protection=true
+    prod_teardown_mode_line="prod_teardown_mode             = false"
     criticality="high"
     ;;
 esac
@@ -150,6 +152,7 @@ asg_checkpoint_delay_seconds   = ${asg_checkpoint_delay_seconds}
 tg_slow_start_seconds          = ${tg_slow_start_seconds}
 health_check_healthy_threshold = ${health_check_healthy_threshold}
 enable_alb_deletion_protection = ${enable_alb_deletion_protection}
+${prod_teardown_mode_line}
 instance_type_web              = "t3.micro"
 
 tf_state_key = "delivery-platform/${TARGET_ENV}/full/terraform.tfstate"

@@ -12,6 +12,18 @@ TMP_ROOT="${TMPDIR:-/tmp}/delivery-platform-policy-tests_$$"
 mkdir -p "$TMP_ROOT"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
+VALID_EXPIRES="$(date -u -d '+ 2 days' +%F)"
+VALID_DESTROY_EXCEPTION="$TMP_ROOT/allow-destroy-valid.json"
+WRONG_DESTROY_EXCEPTION="$TMP_ROOT/allow-destroy-wrong-address.json"
+WILDCARD_DESTROY_EXCEPTION="$TMP_ROOT/allow-destroy-invalid-wildcard.json"
+
+jq --arg expires "$VALID_EXPIRES" '.expires = $expires' \
+  "$SCRIPT_DIR/allow-destroy.example.json" > "$VALID_DESTROY_EXCEPTION"
+jq --arg expires "$VALID_EXPIRES" '.expires = $expires' \
+  "$TEST_DIR/allow-destroy-wrong-address.json" > "$WRONG_DESTROY_EXCEPTION"
+jq --arg expires "$VALID_EXPIRES" '.expires = $expires' \
+  "$TEST_DIR/allow-destroy-invalid-wildcard.json" > "$WILDCARD_DESTROY_EXCEPTION"
+
 # These fixtures are intentionally small synthetic Terraform JSON plans.
 # They keep policy behavior testable without an AWS account or provider initialization.
 
@@ -135,12 +147,14 @@ deny_case public_ingress_inline_sg "$TEST_DIR/public-ingress-inline-sg-plan.json
 deny_case missing_tags "$TEST_DIR/missing-tags-plan.json" deny_missing_required_tags
 deny_case empty_tags "$TEST_DIR/empty-tags-plan.json" deny_missing_required_tags
 
-# Exception behavior: exact approved destroy passes; wrong address still denies.
-pass_case_with_exception destroy_allowed "$TEST_DIR/destroy-plan.json" "$SCRIPT_DIR/allow-destroy.example.json"
-deny_case_with_exception destroy_wrong_exception "$TEST_DIR/destroy-plan.json" "$TEST_DIR/allow-destroy-wrong-address.json" deny_destructive_change
+# Exception behavior: an exact current-plan address passes. An address absent
+# from the current plan is rejected as invalid approval evidence.
+pass_case_with_exception destroy_allowed "$TEST_DIR/destroy-plan.json" "$VALID_DESTROY_EXCEPTION"
+input_error_case destroy_wrong_exception "$TEST_DIR/destroy-plan.json" "$WRONG_DESTROY_EXCEPTION"
 
-# Exception validation: wildcard and expired approvals must fail as bad evidence.
-input_error_case invalid_wildcard_exception "$TEST_DIR/destroy-plan.json" "$TEST_DIR/allow-destroy-invalid-wildcard.json"
+# Exception validation: wildcard, expired, and long-lived approvals fail closed.
+input_error_case invalid_wildcard_exception "$TEST_DIR/destroy-plan.json" "$WILDCARD_DESTROY_EXCEPTION"
 input_error_case expired_exception "$TEST_DIR/destroy-plan.json" "$TEST_DIR/allow-destroy-expired.json"
+input_error_case long_lived_exception "$TEST_DIR/destroy-plan.json" "$TEST_DIR/allow-destroy-too-long.json"
 
 echo "policy tests passed"

@@ -10,6 +10,8 @@ The scripts do not change the infrastructure or its state.
 | --- | --- |
 | `run-local-checks.sh` | Runs safe local checks. |
 | `write-terraform-env-files.sh` | Generates temporary `backend.hcl` and `terraform.auto.tfvars` for CI. |
+| `validate-terraform-env-config.sh` | Fails closed when backend key, region, project, or environment does not match the selected root. |
+| `test-terraform-env-config.sh` | Runs positive and negative tests for generated environment configuration. |
 | `promotion-evidence-template.sh` | Generates valid promotion evidence JSON. |
 | `reviewer-note-template.sh` | Generates a Markdown reviewer note from `risk-decision.json`. |
 | `runtime-health-check.sh` | Collects read-only ALB/ASG/CloudWatch runtime evidence. |
@@ -48,6 +50,12 @@ scripts/write-terraform-env-files.sh dev
 ```
 
 This script exists for GitHub Actions: `backend.hcl` and `terraform.auto.tfvars` are not stored in Git, so a clean runner must create them before `terraform init`.
+
+Validate generated or manually prepared files before initialization:
+
+```bash
+scripts/validate-terraform-env-config.sh dev
+```
 
 ## Review helpers
 

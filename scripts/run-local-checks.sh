@@ -58,6 +58,9 @@ step "Running cost policy tests"
 step "Running risk classifier tests"
 "$PROJECT_DIR/policies/test-risk-classifier.sh"
 
+step "Running Terraform environment config tests"
+"$PROJECT_DIR/scripts/test-terraform-env-config.sh"
+
 if [[ "$RUN_OPA" == "true" ]]; then
   if command -v opa >/dev/null 2>&1; then
     step "Running OPA policy tests"

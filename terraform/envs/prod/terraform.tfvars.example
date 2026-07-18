@@ -21,6 +21,7 @@ asg_checkpoint_delay_seconds   = 600
 tg_slow_start_seconds          = 120
 health_check_healthy_threshold = 3
 enable_alb_deletion_protection = true
+prod_teardown_mode             = false
 instance_type_web              = "t3.micro"
 
 tf_state_key = "delivery-platform/prod/full/terraform.tfstate"
