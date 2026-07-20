@@ -153,7 +153,8 @@ tg_slow_start_seconds          = ${tg_slow_start_seconds}
 health_check_healthy_threshold = ${health_check_healthy_threshold}
 enable_alb_deletion_protection = ${enable_alb_deletion_protection}
 ${prod_teardown_mode_line}
-instance_type_web              = "t3.micro"
+
+instance_type_web = "t3.micro"
 
 tf_state_key = "delivery-platform/${TARGET_ENV}/full/terraform.tfstate"
 
