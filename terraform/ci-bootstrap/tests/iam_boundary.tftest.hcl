@@ -52,6 +52,14 @@ run "least_privilege_ci_roles" {
   }
 
   assert {
+    condition = alltrue([
+      for action in ["ec2:MonitorInstances", "ec2:UnmonitorInstances"] :
+      strcontains(aws_iam_role_policy.apply["dev"].policy, action)
+    ])
+    error_message = "Apply role must manage detailed monitoring enabled on the SSM proxy instance."
+  }
+
+  assert {
     condition = (
       aws_iam_role.apply["dev"].name == "delivery-platform-ci-dev-apply" &&
       !startswith(aws_iam_role.apply["dev"].name, "delivery-platform-dev-") &&

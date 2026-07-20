@@ -222,7 +222,7 @@ resource "aws_iam_role_policy" "apply" {
           "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup", "ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress",
           "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress", "ec2:ModifySecurityGroupRules",
           "ec2:CreateLaunchTemplate", "ec2:CreateLaunchTemplateVersion", "ec2:ModifyLaunchTemplate", "ec2:DeleteLaunchTemplate",
-          "ec2:RunInstances", "ec2:TerminateInstances",
+          "ec2:RunInstances", "ec2:TerminateInstances", "ec2:MonitorInstances", "ec2:UnmonitorInstances",
           "ec2:CreateVpcEndpoint", "ec2:ModifyVpcEndpoint", "ec2:DeleteVpcEndpoints",
           "ec2:CreateTags", "ec2:DeleteTags",
         ]
