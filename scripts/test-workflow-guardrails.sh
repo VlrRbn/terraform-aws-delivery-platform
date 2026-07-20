@@ -6,7 +6,7 @@ PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
-mapfile -t action_uses < <(rg -N --no-filename '^[[:space:]]*uses:' "$PROJECT_DIR/.github/workflows" | sed 's/^[[:space:]]*//')
+mapfile -t action_uses < <(grep -RhE '^[[:space:]]*uses:' "$PROJECT_DIR/.github/workflows" | sed 's/^[[:space:]]*//')
 if ((${#action_uses[@]} == 0)); then
   echo "No workflow action uses found" >&2
   exit 1
