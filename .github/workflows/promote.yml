@@ -125,7 +125,7 @@ jobs:
           echo "target_env=$TARGET_ENV" >> "$GITHUB_OUTPUT"
 
       - name: Checkout exact commit
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -205,7 +205,7 @@ jobs:
 
       - name: Download source apply artifact
         if: env.TARGET_ENV != 'dev'
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: delivery-platform-${{ env.SOURCE_ENV }}-${{ env.RELEASE_ID }}-apply
           path: /tmp/delivery-platform-source-apply
@@ -388,7 +388,7 @@ jobs:
           echo "artifact_name=$artifact" >> "$GITHUB_OUTPUT"
 
       - name: Upload review artifact before approval
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.artifact.outputs.artifact_name }}
           path: ${{ env.PROJECT_DIR }}/terraform/envs/${{ inputs.target_env }}/review-artifact/
@@ -412,7 +412,7 @@ jobs:
 
     steps:
       - name: Checkout exact commit
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -425,7 +425,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Download approved review artifact
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ needs.plan.outputs.artifact_name }}
           path: /tmp/delivery-platform-review-artifact
@@ -559,7 +559,7 @@ jobs:
 
       - name: Upload apply artifact
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: delivery-platform-${{ needs.plan.outputs.target_env }}-${{ env.RELEASE_ID }}-apply
           path: |
