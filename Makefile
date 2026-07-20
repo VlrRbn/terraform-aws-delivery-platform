@@ -66,7 +66,7 @@ checkov:
 	checkov -d $(TERRAFORM_DIR) --framework terraform --config-file checkov.yaml --skip-download
 
 yaml:
-	python3 -c "from pathlib import Path; import yaml; [print(f'OK {p}') for p in sorted(Path('.github/workflows').glob('*.yml')) if yaml.safe_load(p.open()) is not None]"
+	python3 -c "from pathlib import Path; import yaml; [print(f'OK {p}') for p in sorted(Path('.github').rglob('*.yml')) if yaml.safe_load(p.open()) is not None]"
 
 redaction-smoke:
 	@tmp_in="$$(mktemp)"; tmp_out="$$(mktemp)"; \

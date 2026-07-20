@@ -98,6 +98,10 @@ resource "aws_s3_bucket" "cloudtrail_logs" {
   bucket        = var.cloudtrail_log_bucket_name
   force_destroy = var.force_destroy_log_bucket
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
   tags = merge(local.tags, {
     Name = var.cloudtrail_log_bucket_name
     Role = "cloudtrail-log-bucket"
@@ -164,6 +168,10 @@ resource "aws_cloudtrail" "terraform_audit" {
   is_multi_region_trail         = var.is_multi_region_trail
   enable_log_file_validation    = true
   enable_logging                = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
 
   event_selector {
     read_write_type           = "All"

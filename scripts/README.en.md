@@ -12,6 +12,9 @@ The scripts do not change the infrastructure or its state.
 | `write-terraform-env-files.sh` | Generates temporary `backend.hcl` and `terraform.auto.tfvars` for CI. |
 | `validate-terraform-env-config.sh` | Fails closed when backend key, region, project, or environment does not match the selected root. |
 | `test-terraform-env-config.sh` | Runs positive and negative tests for generated environment configuration. |
+| `audit-legacy-ci-roles.sh` | Inventories old environment-owned CI roles and last-used evidence without changing AWS. |
+| `audit-github-environments.sh` | Verifies a manual reviewer, deployment branches, and environment-specific apply-role secret names through the read-only GitHub API; optional strict mode also requires independent review. |
+| `test-workflow-guardrails.sh` | Tests action SHA pins and positive/negative GitHub Environment audit fixtures. |
 | `promotion-evidence-template.sh` | Generates valid promotion evidence JSON. |
 | `reviewer-note-template.sh` | Generates a Markdown reviewer note from `risk-decision.json`. |
 | `runtime-health-check.sh` | Collects read-only ALB/ASG/CloudWatch runtime evidence. |
@@ -82,6 +85,27 @@ These commands read AWS/Terraform data and write local evidence bundles:
 AWS_REGION=eu-west-1 scripts/runtime-health-check.sh dev
 scripts/state-snapshot.sh dev
 scripts/post-incident-check.sh dev
+```
+
+Inventory CI roles left active by the state cutover:
+
+```bash
+AWS_PROFILE=YOUR_READ_ONLY_PROFILE scripts/audit-legacy-ci-roles.sh
+```
+
+Verify GitHub Environment protection rules:
+
+```bash
+gh auth login
+scripts/audit-github-environments.sh OWNER/REPO
+```
+
+The default matches the solo portfolio/lab model: a required reviewer must be
+configured, but self-review may remain enabled. Team and production-like setups
+can require independent approval explicitly:
+
+```bash
+REQUIRE_INDEPENDENT_REVIEW=true scripts/audit-github-environments.sh OWNER/REPO
 ```
 
 ## CloudTrail audit evidence

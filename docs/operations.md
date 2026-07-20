@@ -17,7 +17,7 @@ Run `drift-check.yml` for the target environment. Exit code `2` means Terraform 
 
 ## Reviewed Replacement Or Destroy
 
-Destructive actions remain denied by default. For an approved replacement, commit an exception under `policies/approved-destroy/` using the schema in `policies/allow-destroy.example.json`, list only exact destructive addresses from the current plan, set an expiry no more than seven days away, and pass its repository-relative path through `allow_destroy_file`. The validated exception is copied into the review artifact; GitHub Environment approval is still required. Wildcards, unrelated addresses, expired records, and long-lived approvals fail closed.
+Destructive actions remain denied by default. For an approved replacement, commit an exception under `policies/approved-destroy/` using the schema in `policies/allow-destroy.example.json`, list only exact destructive addresses from the current plan, set an expiry no more than seven days away, and bind it to the target environment, release ID, and full commit SHA. Pass its repository-relative path through `allow_destroy_file`. The validated exception is copied into the review artifact; GitHub Environment approval is still required. Wildcards, unrelated addresses, mismatched workflow identity, expired records, and long-lived approvals fail closed.
 
 ## Incident
 

@@ -328,3 +328,77 @@ resource "aws_iam_role_policy" "apply" {
     ]
   })
 }
+
+# Explicit denies keep an environment apply role from mutating resources owned
+# by another delivery environment. This policy grants nothing; it only narrows
+# the service-wide CRUD permissions required by the Terraform module.
+resource "aws_iam_role_policy" "apply_environment_boundary" {
+  for_each = local.environments
+  name     = "${var.role_name_prefix}-${each.key}-cross-environment-deny"
+  role     = aws_iam_role.apply[each.key].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "DenyOtherEnvironmentRequestTags"
+        Effect   = "Deny"
+        Action   = ["ec2:*", "elasticloadbalancing:*", "autoscaling:*", "cloudwatch:*"]
+        Resource = "*"
+        Condition = { StringEquals = {
+          "aws:RequestTag/Environment" = [for env in keys(local.environments) : env if env != each.key]
+        } }
+      },
+      {
+        Sid      = "DenyOtherEnvironmentEc2Resources"
+        Effect   = "Deny"
+        Action   = "ec2:*"
+        Resource = "*"
+        Condition = { StringEquals = {
+          "ec2:ResourceTag/Environment" = [for env in keys(local.environments) : env if env != each.key]
+        } }
+      },
+      {
+        Sid      = "DenyOtherEnvironmentLoadBalancingResources"
+        Effect   = "Deny"
+        Action   = "elasticloadbalancing:*"
+        Resource = "*"
+        Condition = { StringEquals = {
+          "elasticloadbalancing:ResourceTag/Environment" = [for env in keys(local.environments) : env if env != each.key]
+        } }
+      },
+      {
+        Sid      = "DenyOtherEnvironmentAutoScalingResources"
+        Effect   = "Deny"
+        Action   = "autoscaling:*"
+        Resource = "*"
+        Condition = { StringEquals = {
+          "autoscaling:ResourceTag/Environment" = [for env in keys(local.environments) : env if env != each.key]
+        } }
+      },
+      {
+        Sid      = "DenyOtherEnvironmentCloudWatchResources"
+        Effect   = "Deny"
+        Action   = "cloudwatch:*"
+        Resource = "*"
+        Condition = { StringEquals = {
+          "aws:ResourceTag/Environment" = [for env in keys(local.environments) : env if env != each.key]
+        } }
+      },
+      {
+        Sid    = "DenyNamedResourcesOwnedByOtherEnvironments"
+        Effect = "Deny"
+        Action = ["elasticloadbalancing:*", "autoscaling:*", "cloudwatch:*"]
+        Resource = flatten([
+          for env, config in local.environments : [
+            "arn:aws:elasticloadbalancing:${var.aws_region}:${data.aws_caller_identity.current.account_id}:loadbalancer/app/${config.project_name}-*/*",
+            "arn:aws:elasticloadbalancing:${var.aws_region}:${data.aws_caller_identity.current.account_id}:targetgroup/${config.project_name}-*/*",
+            "arn:aws:elasticloadbalancing:${var.aws_region}:${data.aws_caller_identity.current.account_id}:listener/app/${config.project_name}-*/*/*",
+            "arn:aws:autoscaling:${var.aws_region}:${data.aws_caller_identity.current.account_id}:autoScalingGroup:*:autoScalingGroupName/${config.project_name}-*",
+            "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:${config.project_name}-*",
+          ] if env != each.key
+        ])
+      },
+    ]
+  })
+}

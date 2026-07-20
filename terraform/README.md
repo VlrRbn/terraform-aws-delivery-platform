@@ -11,7 +11,7 @@ This directory contains multiple Terraform roots. They are intentionally separat
 | `envs/dev/` | Development environment | Lower capacity, easier debugging |
 | `envs/stage/` | Promotion/pre-production environment | Mirrors production flow with smaller blast radius |
 | `envs/prod/` | Production-style environment | Stricter ASG refresh, ALB deletion protection, and no direct web SSM by default |
-| `audit-trail/` | CloudTrail log bucket/trail and optional S3 state data events | Separate from app envs so audit lifecycle is independent |
+| `audit-trail/` | CloudTrail log bucket/trail and optional S3 state data events | Separate lifecycle; trail and bucket are protected by `prevent_destroy` |
 | `modules/network/` | Shared infrastructure module | Used by dev/stage/prod roots |
 
 ## Recommended Bootstrap Order

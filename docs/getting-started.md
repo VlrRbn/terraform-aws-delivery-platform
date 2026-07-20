@@ -92,6 +92,12 @@ Run this bootstrap with the same reviewed local/admin bootstrap identity used fo
 
 For an existing deployment, create the new bootstrap roles first and switch GitHub to their ARNs before planning environment roots. Environment states use `removed` blocks to forget legacy CI roles without deleting them. Review and remove those orphaned legacy roles separately only after the new workflow path is verified.
 
+Use `scripts/audit-legacy-ci-roles.sh` with a read-only AWS identity to collect
+their trust, inline/attached policies, and IAM last-used evidence. The helper
+does not delete roles. If the old repository path is inactive and the new roles
+are verified, retire the legacy roles in a separate explicitly approved admin
+change rather than adding deletion permissions to an environment apply role.
+
 The first environment migration also removes the old inline secret policy from the proxy and creates a separate web runtime role. The policy gate will therefore require a short-lived exception for the exact address `module.network.aws_iam_role_policy.runtime_secret_read`; inspect the real plan and approve only that address. Do not add CI roles or wildcard addresses to the exception.
 
 ## 4. Build AMIs With Packer
@@ -161,12 +167,27 @@ terraform-prod:  TF_APPLY_ROLE_ARN_PROD
 
 For `terraform-dev`, `terraform-stage`, and `terraform-prod`:
 
-- add required reviewers; without them the workflow does not wait for manual approval;
-- disable self-review if this is a team repo;
+- add `VlrRbn` as the required reviewer; without a reviewer the workflow does not wait for manual approval;
+- leave self-review enabled for this solo portfolio/lab so the owner can release after inspecting the plan;
 - restrict deployment branches to the protected `main` branch;
 - store the apply role ARN as an environment secret.
 
-For a solo portfolio repo, self-review may be unavoidable. Document that as a portfolio limitation, not as a production recommendation.
+Self-review provides a deliberate pause but not independent approval. This is an explicit portfolio/lab limitation, not a production recommendation. A team or production-like deployment should use a different reviewer and enable `prevent_self_review`.
+
+Verify the live configuration after saving the environment rules:
+
+```bash
+scripts/audit-github-environments.sh OWNER/REPO
+```
+
+The audit defaults to the portfolio/lab model and fails when a reviewer,
+protected/main branch rules, or the matching environment apply-role secret is
+missing. It checks secret names only; GitHub never returns secret values. To
+enforce independent approval for a team or production-like deployment, run:
+
+```bash
+REQUIRE_INDEPENDENT_REVIEW=true scripts/audit-github-environments.sh OWNER/REPO
+```
 
 ## 7. First Dev Apply
 
@@ -313,5 +334,8 @@ addresses through the destructive-change exception flow. Do not use
 deletion protection is still enabled.
 
 Do not destroy the audit trail before collecting evidence you still need.
-
-The CloudTrail log bucket may remain after destroy if it contains object versions. That is intentional when `force_destroy_log_bucket = false`.
+The trail and its log bucket use `prevent_destroy`, so an ordinary destroy plan
+fails before Terraform can partially disable audit logging. A deliberate audit
+teardown requires a separately reviewed code change removing both lifecycle
+guards. After that change, the log bucket may still remain if it contains object
+versions and `force_destroy_log_bucket = false`.

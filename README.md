@@ -190,9 +190,9 @@ Raw evidence can contain account IDs, ARNs, IPs, DNS names, and internal metadat
 
 ## CI Dependency Pinning
 
-Workflow actions use readable major version tags such as `actions/checkout@v6` and `actions/upload-artifact@v6`.
-
-For a stricter production repository, pin third-party actions by commit SHA and update them through a separate dependency review.
+Workflow actions are pinned to full commit SHAs. The reviewed major version is
+kept as an inline YAML comment, and updates should go through a separate
+dependency review.
 
 ## Project Hygiene
 

@@ -8,7 +8,9 @@
 - CI roles and OIDC live in the independent `terraform/ci-bootstrap` state, not in application environment state.
 - Plan trust is restricted to the protected branch; PR subjects are not trusted for AWS access.
 - Apply roles are scoped by GitHub Environment trust conditions.
+- GitHub Environments retain a manual approval pause. The solo portfolio/lab permits owner self-review; this is not an independent approval boundary. Team and production-like deployments should disable self-review and require another reviewer.
 - Bootstrap-owned permissions boundaries cap both EC2 runtime roles. Environment apply roles may manage those roles but cannot remove their boundaries or attach arbitrary managed policies.
+- Apply roles also carry a deny-only cross-environment policy. It rejects other environment request/resource tags and known ALB, target group, listener, ASG, and alarm name prefixes. This single-account plus deny-guardrail model is appropriate for the portfolio/lab deployment; three application accounts (`dev`, `stage`, and `prod`) are the preferred production-like boundary. See `docs/architecture.md` for the topology and its limitations.
 
 ## State
 

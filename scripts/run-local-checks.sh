@@ -61,6 +61,9 @@ step "Running risk classifier tests"
 step "Running Terraform environment config tests"
 "$PROJECT_DIR/scripts/test-terraform-env-config.sh"
 
+step "Running workflow guardrail tests"
+"$PROJECT_DIR/scripts/test-workflow-guardrails.sh"
+
 if [[ "$RUN_OPA" == "true" ]]; then
   if command -v opa >/dev/null 2>&1; then
     step "Running OPA policy tests"
@@ -71,6 +74,18 @@ if [[ "$RUN_OPA" == "true" ]]; then
 fi
 
 if [[ "$RUN_TERRAFORM" == "true" ]]; then
+  for standalone_root in backend-bootstrap audit-trail; do
+    step "Running Terraform ${standalone_root} init"
+    env TF_DATA_DIR="/tmp/delivery-platform-${standalone_root}-data" \
+      terraform -chdir="$PROJECT_DIR/terraform/${standalone_root}" \
+      init -backend=false -input=false -no-color
+
+    step "Running Terraform ${standalone_root} validate"
+    env TF_DATA_DIR="/tmp/delivery-platform-${standalone_root}-data" \
+      terraform -chdir="$PROJECT_DIR/terraform/${standalone_root}" \
+      validate -no-color
+  done
+
   step "Running Terraform module init"
   env TF_DATA_DIR=/tmp/delivery-platform-module-test-data \
     terraform -chdir="$PROJECT_DIR/terraform/modules/network" \

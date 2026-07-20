@@ -102,4 +102,28 @@ run "least_privilege_ci_roles" {
     )
     error_message = "Apply role must require the bootstrap boundaries and must not permit arbitrary managed-policy attachment."
   }
+
+  assert {
+    condition = (
+      alltrue([
+        for statement in jsondecode(aws_iam_role_policy.apply_environment_boundary["dev"].policy).Statement :
+        statement.Effect == "Deny"
+      ]) &&
+      strcontains(aws_iam_role_policy.apply_environment_boundary["dev"].policy, "DenyOtherEnvironmentRequestTags") &&
+      strcontains(aws_iam_role_policy.apply_environment_boundary["dev"].policy, "DenyOtherEnvironmentEc2Resources") &&
+      strcontains(aws_iam_role_policy.apply_environment_boundary["dev"].policy, "DenyOtherEnvironmentLoadBalancingResources") &&
+      strcontains(aws_iam_role_policy.apply_environment_boundary["dev"].policy, "DenyOtherEnvironmentAutoScalingResources") &&
+      strcontains(aws_iam_role_policy.apply_environment_boundary["dev"].policy, "DenyOtherEnvironmentCloudWatchResources")
+    )
+    error_message = "Cross-environment policy must contain deny-only tag guardrails for every mutable infrastructure service."
+  }
+
+  assert {
+    condition = (
+      strcontains(aws_iam_role_policy.apply_environment_boundary["dev"].policy, "delivery-platform-stage-*") &&
+      strcontains(aws_iam_role_policy.apply_environment_boundary["dev"].policy, "delivery-platform-prod-*") &&
+      !strcontains(aws_iam_role_policy.apply_environment_boundary["dev"].policy, "delivery-platform-dev-*")
+    )
+    error_message = "The dev apply role must deny named stage/prod resources without denying its own project prefix."
+  }
 }
