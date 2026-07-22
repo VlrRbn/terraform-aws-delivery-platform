@@ -77,8 +77,13 @@ consistent. Passing `--body` replaces the template instead of filling it; use
 Wait for required checks:
 
 ```bash
-gh pr checks --repo "$REPO" --watch
+gh pr checks fix/short-description \
+  --repo "$REPO" \
+  --watch
 ```
+
+When `--repo` is present, this version of GitHub CLI requires a PR number, URL,
+or head branch as the positional argument.
 
 Merge a successful PR and update the local `main` branch:
 
