@@ -90,7 +90,12 @@ terraform output runtime_permissions_boundary_arns
 
 Run this bootstrap with the same reviewed local/admin bootstrap identity used for the state bucket. Copy plan outputs to repository variables and apply outputs to the corresponding GitHub Environment secrets. The runtime boundary output is evidence that the bootstrap-owned guardrails exist; environment workflows derive the same boundary names from their fixed project names.
 
-For an existing deployment, create the new bootstrap roles first and switch GitHub to their ARNs before planning environment roots. Environment states use `removed` blocks to forget legacy CI roles without deleting them. Review and remove those orphaned legacy roles separately only after the new workflow path is verified.
+For an existing deployment that still contains the former environment-owned CI
+roles, create the bootstrap roles first and switch GitHub to their ARNs before
+planning environment roots. Environment states use `removed` blocks to forget
+legacy CI roles without deleting them. Fresh deployments do not need this
+migration step. Review and remove orphaned legacy roles separately only after
+the new workflow path is verified.
 
 Use `scripts/audit-legacy-ci-roles.sh` with a read-only AWS identity to collect
 their trust, inline/attached policies, and IAM last-used evidence. The helper
@@ -98,7 +103,12 @@ does not delete roles. If the old repository path is inactive and the new roles
 are verified, retire the legacy roles in a separate explicitly approved admin
 change rather than adding deletion permissions to an environment apply role.
 
-The first environment migration also removes the old inline secret policy from the proxy and creates a separate web runtime role. The policy gate will therefore require a short-lived exception for the exact address `module.network.aws_iam_role_policy.runtime_secret_read`; inspect the real plan and approve only that address. Do not add CI roles or wildcard addresses to the exception.
+The first environment migration can also remove the old inline secret policy
+from the proxy and create a separate web runtime role. Treat that as a legacy
+cutover, not as part of a fresh setup. If its reviewed plan contains an
+intentional replacement or removal, use the two-run repository-bound exception
+process documented in `docs/operations.md`. Never add CI roles, wildcard
+addresses, or unrelated resources to that exception.
 
 ## 4. Build AMIs With Packer
 
@@ -167,7 +177,7 @@ terraform-prod:  TF_APPLY_ROLE_ARN_PROD
 
 For `terraform-dev`, `terraform-stage`, and `terraform-prod`:
 
-- add `VlrRbn` as the required reviewer; without a reviewer the workflow does not wait for manual approval;
+- add the current repository operator as the required reviewer (`VlrRbn` in this repository); without a reviewer the workflow does not wait for manual approval;
 - leave self-review enabled for this solo portfolio/lab so the owner can release after inspecting the plan;
 - restrict deployment branches to the protected `main` branch;
 - store the apply role ARN as an environment secret.
@@ -312,11 +322,15 @@ portfolio/
 
 ## 14. Cleanup Order
 
-Recommended cleanup:
+Routine portfolio/lab cleanup removes only the disposable application roots:
 
 ```text
-prod -> stage -> dev -> audit-trail -> backend-bootstrap
+prod -> stage -> dev
 ```
+
+Keep `ci-bootstrap`, `backend-bootstrap`, GitHub Environment configuration, and
+the AMI variables when you want later workflow runs to recreate the application
+environments. This is the normal between-lessons cleanup model.
 
 Prod cleanup is intentionally two-step. A direct destroy can remove dependent
 resources before AWS rejects deletion of the protected ALB. First create and
@@ -328,10 +342,15 @@ enable_alb_deletion_protection = false
 prod_teardown_mode             = true
 ```
 
-Only after that apply succeeds, create a fresh destroy plan and review its exact
-addresses through the destructive-change exception flow. Do not use
+Only after that apply succeeds, create and review a fresh destroy plan. The
+tested local/admin procedure is documented in `docs/operations.md`. Do not use
 `prod_teardown_mode` as a way to run destroy directly against an ALB whose
 deletion protection is still enabled.
+
+Full platform retirement is separate. Remove `audit-trail` only after retaining
+the required evidence, remove `ci-bootstrap` only after GitHub delivery is no
+longer needed, and remove `backend-bootstrap` last. These protected roots need
+their own reviewed teardown changes; they are not part of routine lab cleanup.
 
 Do not destroy the audit trail before collecting evidence you still need.
 The trail and its log bucket use `prevent_destroy`, so an ordinary destroy plan

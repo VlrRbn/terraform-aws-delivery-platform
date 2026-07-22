@@ -62,6 +62,16 @@ variable "role_name_prefix" {
     condition     = can(regex("^[a-z][a-z0-9-]{2,40}$", var.role_name_prefix))
     error_message = "role_name_prefix must be lowercase kebab-style and 3-41 characters."
   }
+
+  validation {
+    condition = alltrue([
+      for project_name in values(var.environment_project_names) :
+      var.role_name_prefix != project_name &&
+      !startswith(var.role_name_prefix, "${project_name}-") &&
+      !startswith(project_name, "${var.role_name_prefix}-")
+    ])
+    error_message = "role_name_prefix must not equal, contain, or be contained by an environment project prefix."
+  }
 }
 
 variable "environment_project_names" {
@@ -75,9 +85,10 @@ variable "environment_project_names" {
   validation {
     condition = (
       length(var.environment_project_names) == 3 &&
-      alltrue([for env in ["dev", "stage", "prod"] : contains(keys(var.environment_project_names), env)]) &&
-      alltrue([for name in values(var.environment_project_names) : can(regex("^[a-z][a-z0-9-]{2,30}$", name))])
+      lookup(var.environment_project_names, "dev", "") == "delivery-platform-dev" &&
+      lookup(var.environment_project_names, "stage", "") == "delivery-platform-stage" &&
+      lookup(var.environment_project_names, "prod", "") == "delivery-platform-prod"
     )
-    error_message = "environment_project_names must define valid dev, stage, and prod project prefixes."
+    error_message = "environment_project_names is fixed to the delivery-platform-dev, delivery-platform-stage, and delivery-platform-prod prefixes."
   }
 }

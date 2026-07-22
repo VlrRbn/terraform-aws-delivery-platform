@@ -33,4 +33,9 @@ terraform-prod:  TF_APPLY_ROLE_ARN_PROD=arn:aws:iam::ACCOUNT_ID:role/delivery-pl
 Configure required reviewers and restrict deployments to the protected `main`
 branch. Merely creating a GitHub Environment does not add a manual approval gate.
 
+For this solo portfolio/lab, the repository owner may remain able to approve
+their own deployment. That is a deliberate pause, not independent review. A
+team or production-like setup should use another reviewer and enable
+`prevent_self_review`.
+
 The role ARNs come from `terraform/ci-bootstrap` outputs. GitHub owner/repository and OIDC provider configuration are inputs to that bootstrap root, not repository variables consumed by promotion workflows.

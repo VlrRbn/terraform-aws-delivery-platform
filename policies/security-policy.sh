@@ -22,7 +22,6 @@ Environment variables:
   ALLOW_DESTROY_FILE  Optional JSON exception file for approved destructive addresses.
   TARGET_ENV          Required with ALLOW_DESTROY_FILE: dev, stage, or prod.
   RELEASE_ID          Required with ALLOW_DESTROY_FILE: current workflow release ID.
-  COMMIT_SHA          Required with ALLOW_DESTROY_FILE: exact 40-character commit SHA.
 
 Manual example:
   OUT_DIR=/tmp/delivery-platform-policy security-policy.sh tfplan.json
@@ -44,7 +43,6 @@ ALLOW_DESTROY_FILE="${ALLOW_DESTROY_FILE:-}"
 OUT_DIR="${OUT_DIR:-.}"
 TARGET_ENV="${TARGET_ENV:-}"
 RELEASE_ID="${RELEASE_ID:-}"
-COMMIT_SHA="${COMMIT_SHA:-}"
 
 mkdir -p "$OUT_DIR"
 
@@ -71,7 +69,8 @@ fi
 # - exact Terraform addresses only;
 # - reason and approver are required;
 # - expiry must be a real calendar date between today and seven days from now.
-# - environment, release, and commit must match the current workflow exactly.
+# - environment and release must match the current workflow exactly;
+# - workflow commit and plan hashes are bound in generated review evidence.
 if [[ -n "$ALLOW_DESTROY_FILE" ]]; then
   if [[ ! -f "$ALLOW_DESTROY_FILE" ]]; then
     echo "ALLOW_DESTROY_FILE not found: $ALLOW_DESTROY_FILE" >&2
@@ -82,31 +81,30 @@ if [[ -n "$ALLOW_DESTROY_FILE" ]]; then
   # The policy accepts only exact Terraform addresses so a reviewer can map approval to concrete resources.
   if ! jq -e '
     type == "object"
+    and (keys | sort == ["allowed_addresses", "approved_by", "expires", "reason", "release_id", "target_env"])
     and (.reason | type == "string" and length > 0)
     and (.approved_by | type == "string" and length > 0)
     and (.expires | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))
     and (.target_env | type == "string" and test("^(dev|stage|prod)$"))
     and (.release_id | type == "string" and test("^[A-Za-z0-9._-]{1,80}$"))
-    and (.commit_sha | type == "string" and test("^[0-9a-f]{40}$"))
     and (.allowed_addresses | type == "array" and length > 0)
     and all(.allowed_addresses[]; type == "string" and length > 0 and (contains("*") | not))
   ' "$ALLOW_DESTROY_FILE" >/dev/null; then
-    echo "ALLOW_DESTROY_FILE is invalid. Required: reason, approved_by, expires, target_env, release_id, 40-character commit_sha, and exact allowed_addresses." >&2
+    echo "ALLOW_DESTROY_FILE is invalid. Required exact fields: reason, approved_by, expires, target_env, release_id, and allowed_addresses." >&2
     exit 1
   fi
 
-  if [[ ! "$TARGET_ENV" =~ ^(dev|stage|prod)$ || -z "$RELEASE_ID" || ! "$COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-    echo "TARGET_ENV, RELEASE_ID, and 40-character COMMIT_SHA are required with ALLOW_DESTROY_FILE" >&2
+  if [[ ! "$TARGET_ENV" =~ ^(dev|stage|prod)$ || ! "$RELEASE_ID" =~ ^[A-Za-z0-9._-]{1,80}$ ]]; then
+    echo "valid TARGET_ENV and RELEASE_ID are required with ALLOW_DESTROY_FILE" >&2
     exit 1
   fi
 
   if ! jq -e \
     --arg target_env "$TARGET_ENV" \
     --arg release_id "$RELEASE_ID" \
-    --arg commit_sha "$COMMIT_SHA" \
-    '.target_env == $target_env and .release_id == $release_id and .commit_sha == $commit_sha' \
+    '.target_env == $target_env and .release_id == $release_id' \
     "$ALLOW_DESTROY_FILE" >/dev/null; then
-    echo "ALLOW_DESTROY_FILE does not match the current environment, release, and commit" >&2
+    echo "ALLOW_DESTROY_FILE does not match the current environment and release" >&2
     exit 1
   fi
 

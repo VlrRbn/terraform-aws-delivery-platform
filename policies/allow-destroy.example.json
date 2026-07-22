@@ -4,7 +4,6 @@
   "expires": "REPLACE_WITH_UTC_DATE_WITHIN_7_DAYS",
   "target_env": "REPLACE_WITH_dev_stage_OR_prod",
   "release_id": "REPLACE_WITH_RELEASE_ID",
-  "commit_sha": "REPLACE_WITH_FULL_40_CHARACTER_COMMIT_SHA",
   "allowed_addresses": [
     "module.network.aws_cloudwatch_metric_alarm.old_alarm"
   ]

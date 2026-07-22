@@ -26,6 +26,28 @@ prod  -> delivery-platform/prod/full/terraform.tfstate
 
 The same `network` module is used in every environment. Differences are expressed through environment inputs, not through copied module code.
 
+Subnet keys are a positional lifecycle contract: key `a` is pinned to
+`eu-west-1a`, and key `b` to `eu-west-1b`, in every application root. This
+avoids replacements caused only by changes in the ordering returned by the AWS
+Availability Zones API. Changing the list or its order is an infrastructure
+migration that can replace subnets and dependent resources, so it requires a
+separately reviewed plan.
+
+## Lifecycle Boundaries
+
+The delivery control plane and application environments are intentionally
+separate:
+
+- `backend-bootstrap` owns persistent remote state storage;
+- `ci-bootstrap` owns persistent GitHub OIDC roles and runtime permissions boundaries;
+- `envs/dev`, `envs/stage`, and `envs/prod` are disposable application roots;
+- `audit-trail` has a separate evidence-retention lifecycle.
+
+Destroying an application root does not disable the GitHub delivery path. A
+later promotion can recreate that environment from its retained state backend,
+bootstrap roles, GitHub configuration, and AMI inputs. Full platform retirement
+is a different operation and must remove the persistent roots deliberately.
+
 ## Account Topology
 
 This portfolio/lab deployment intentionally keeps `dev`, `stage`, and `prod` in one AWS account. Separate Terraform states, environment-specific plan/apply roles, fixed project names, resource tags, and deny-only cross-environment IAM guardrails reduce accidental access between environments. These controls are useful defense in depth, but they are not a hard isolation boundary: an account-level administrator remains able to affect every environment, and some AWS authorization paths cannot be constrained reliably by resource tags alone.
@@ -35,3 +57,9 @@ For a production-like deployment, prefer three application accounts: one each fo
 ## Delivery Control Plane
 
 GitHub Actions uses OIDC to assume roles owned by the independent `terraform/ci-bootstrap` state. The branch-bound plan role can read infrastructure and the state object but can mutate only the S3 lockfile. The apply role is gated by GitHub Environment approval and applies only the reviewed saved plan.
+
+The bootstrap contract fixes the application project prefixes to
+`delivery-platform-dev`, `delivery-platform-stage`, and
+`delivery-platform-prod`. Its separate `delivery-platform-ci` role prefix may
+not overlap those names; this keeps bootstrap roles outside the IAM namespace
+that environment apply roles are allowed to manage.

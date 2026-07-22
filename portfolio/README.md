@@ -2,7 +2,16 @@
 
 ## Overview
 
-A production-style Terraform delivery pipeline for AWS infrastructure using GitHub Actions, OIDC, remote state, policy gates, cost controls, approvals, exact saved-plan apply, post-apply verification, and CloudTrail audit evidence.
+A portfolio/lab implementation of a production-style Terraform delivery
+pipeline for AWS infrastructure using GitHub Actions, OIDC, remote state,
+policy gates, cost controls, approvals, exact saved-plan apply, post-apply
+verification, and optional AWS-side evidence collection.
+
+It uses one AWS account with environment-specific roles, state, naming, tags,
+and deny guardrails. These controls reduce accidental cross-environment access
+but do not replace account isolation. Separate `dev`, `stage`, and `prod`
+application accounts are the preferred production-like design. The solo GitHub
+approval gate also permits self-review and is not independent approval.
 
 ## Architecture
 
@@ -25,9 +34,10 @@ PR checks
 -> approval
 -> exact saved-plan apply
 -> post-apply drift check
--> runtime health check
--> CloudTrail audit evidence
 ```
+
+Runtime health and CloudTrail snapshots are collected separately when that
+evidence is needed; they are not automatic `promote.yml` steps.
 
 ## Controls Implemented
 
@@ -40,9 +50,9 @@ PR checks
 | JSON plan policy | block risky changes |
 | Cost policy | limit cost/blast radius |
 | Risk classifier | match review to risk |
-| GitHub Environment approval | human gate |
+| GitHub Environment approval | deliberate pause; independent only with another reviewer |
 | Exact saved plan | reproducible apply |
 | Drift check | verify Terraform state after apply |
-| Runtime health | verify service health |
-| CloudTrail audit | verify AWS-side activity |
+| Runtime health helper | optionally verify service health after a run |
+| CloudTrail audit helper | optionally verify AWS-side activity |
 | Runbooks | recovery readiness |

@@ -49,6 +49,7 @@ AWS_REGION="${AWS_REGION:-eu-west-1}"
 TF_STATE_BUCKET="${TF_STATE_BUCKET:-}"
 TF_WEB_AMI_ID="${TF_WEB_AMI_ID:-}"
 TF_SSM_PROXY_AMI_ID="${TF_SSM_PROXY_AMI_ID:-}"
+availability_zones='["eu-west-1a", "eu-west-1b"]'
 prod_teardown_mode_line=""
 
 if [[ -z "$TF_STATE_BUCKET" ]]; then
@@ -136,6 +137,7 @@ environment  = "${TARGET_ENV}"
 vpc_cidr             = "${vpc_cidr}"
 public_subnet_cidrs  = ${public_subnets}
 private_subnet_cidrs = ${private_subnets}
+availability_zones   = ${availability_zones}
 
 enable_web_ssm = ${enable_web_ssm}
 

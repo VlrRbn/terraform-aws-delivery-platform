@@ -19,6 +19,99 @@ for action_use in "${action_uses[@]}"; do
   fi
 done
 
+promote_workflow="$PROJECT_DIR/.github/workflows/promote.yml"
+create_evidence_calls="$(grep -c 'destroy-exception-evidence.sh.*create' "$promote_workflow" || true)"
+verify_evidence_calls="$(grep -c 'destroy-exception-evidence.sh.*verify' "$promote_workflow" || true)"
+if [[ "$create_evidence_calls" -ne 1 ]]; then
+  echo "promote workflow must create destroy exception evidence exactly once" >&2
+  exit 1
+fi
+if [[ "$verify_evidence_calls" -ne 1 ]]; then
+  echo "promote workflow must verify destroy exception evidence exactly once" >&2
+  exit 1
+fi
+
+evidence_writer="$SCRIPT_DIR/destroy-exception-evidence.sh"
+test_plan="$TMP_ROOT/tfplan"
+test_checksum="$TMP_ROOT/tfplan.sha256"
+test_exception="$TMP_ROOT/allow-destroy.json"
+test_evidence="$TMP_ROOT/destroy-exception-evidence.json"
+test_sha="0123456789abcdef0123456789abcdef01234567"
+test_release="guardrail-test-001"
+
+printf '%s\n' 'synthetic reviewed binary plan' > "$test_plan"
+sha256sum "$test_plan" > "$test_checksum"
+jq -n \
+  --arg expires "$(date -u -d '+ 2 days' +%F)" \
+  --arg release_id "$test_release" \
+  '{
+    reason: "Workflow evidence test",
+    approved_by: "CHANGE-TEST",
+    expires: $expires,
+    target_env: "dev",
+    release_id: $release_id,
+    allowed_addresses: ["module.network.aws_cloudwatch_metric_alarm.old_alarm"]
+  }' > "$test_exception"
+
+GITHUB_SHA="$test_sha" TARGET_ENV=dev RELEASE_ID="$test_release" \
+  "$evidence_writer" create \
+  "$test_plan" "$test_checksum" "$test_exception" \
+  policies/approved-destroy/test.json "$test_evidence"
+
+expected_plan_sha="$(sha256sum "$test_plan" | awk '{print $1}')"
+expected_exception_sha="$(sha256sum "$test_exception" | awk '{print $1}')"
+jq -e \
+  --arg github_sha "$test_sha" \
+  --arg plan_sha "$expected_plan_sha" \
+  --arg exception_sha "$expected_exception_sha" \
+  '
+    .github_sha == $github_sha
+    and .tfplan_sha256 == $plan_sha
+    and .exception_sha256 == $exception_sha
+    and .target_env == "dev"
+    and .release_id == "guardrail-test-001"
+  ' "$test_evidence" >/dev/null
+
+GITHUB_SHA="$test_sha" TARGET_ENV=dev RELEASE_ID="$test_release" \
+  "$evidence_writer" verify \
+  "$test_plan" "$test_checksum" "$test_exception" "$test_evidence"
+
+expect_evidence_failure() {
+  local name="$1"
+  shift
+  if "$@" >/dev/null 2>&1; then
+    echo "Destroy exception evidence negative test passed unexpectedly: $name" >&2
+    exit 1
+  fi
+}
+
+printf '%s\n' 'tampered plan content' > "$test_plan"
+expect_evidence_failure tampered_plan \
+  env GITHUB_SHA="$test_sha" TARGET_ENV=dev RELEASE_ID="$test_release" \
+  "$evidence_writer" verify \
+  "$test_plan" "$test_checksum" "$test_exception" "$test_evidence"
+printf '%s\n' 'synthetic reviewed binary plan' > "$test_plan"
+
+expect_evidence_failure invalid_github_sha \
+  env GITHUB_SHA=short TARGET_ENV=dev RELEASE_ID="$test_release" \
+  "$evidence_writer" create \
+  "$test_plan" "$test_checksum" "$test_exception" \
+  policies/approved-destroy/test.json "$TMP_ROOT/invalid-sha.json"
+
+expect_evidence_failure wrong_release_binding \
+  env GITHUB_SHA="$test_sha" TARGET_ENV=dev RELEASE_ID=different-release \
+  "$evidence_writer" create \
+  "$test_plan" "$test_checksum" "$test_exception" \
+  policies/approved-destroy/test.json "$TMP_ROOT/wrong-release.json"
+
+altered_evidence="$TMP_ROOT/altered-evidence.json"
+jq '.tfplan_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' \
+  "$test_evidence" > "$altered_evidence"
+expect_evidence_failure altered_evidence \
+  env GITHUB_SHA="$test_sha" TARGET_ENV=dev RELEASE_ID="$test_release" \
+  "$evidence_writer" verify \
+  "$test_plan" "$test_checksum" "$test_exception" "$altered_evidence"
+
 fake_gh="$TMP_ROOT/fake-gh"
 cat >"$fake_gh" <<'FAKE_GH'
 #!/usr/bin/env bash
