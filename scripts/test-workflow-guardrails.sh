@@ -19,6 +19,39 @@ for action_use in "${action_uses[@]}"; do
   fi
 done
 
+quality_workflow="$PROJECT_DIR/.github/workflows/terraform-quality-gates.yml"
+if [[ "$(grep -c '^  pull_request:$' "$quality_workflow")" -ne 1 ]]; then
+  echo "Terraform quality gates must define one pull_request trigger" >&2
+  exit 1
+fi
+if sed -n '/^  pull_request:$/,/^  workflow_dispatch:$/p' "$quality_workflow" | grep -q '^[[:space:]]*paths:'; then
+  echo "Terraform quality gates must create a stable check on every pull request" >&2
+  exit 1
+fi
+if [[ "$(grep -c '^[[:space:]]*name: TFLint and Checkov$' "$quality_workflow")" -ne 1 ]]; then
+  echo "Terraform quality gates must keep the required check name: TFLint and Checkov" >&2
+  exit 1
+fi
+
+validate_checkov_pin() {
+  local workflow_file="$1"
+
+  if [[ "$(grep -Ec '^[[:space:]]*run: python -m pip install checkov==3\.3\.8$' "$workflow_file")" -ne 1 ]]; then
+    echo "Checkov must be installed exactly once at the reviewed version 3.3.8" >&2
+    return 1
+  fi
+}
+
+validate_checkov_pin "$quality_workflow"
+
+unpinned_quality_workflow="$TMP_ROOT/unpinned-terraform-quality-gates.yml"
+cp "$quality_workflow" "$unpinned_quality_workflow"
+sed -i 's/checkov==3\.3\.8/--upgrade checkov/' "$unpinned_quality_workflow"
+if validate_checkov_pin "$unpinned_quality_workflow" >/dev/null 2>&1; then
+  echo "Unpinned Checkov negative fixture was not rejected" >&2
+  exit 1
+fi
+
 promote_workflow="$PROJECT_DIR/.github/workflows/promote.yml"
 create_evidence_calls="$(grep -c 'destroy-exception-evidence.sh.*create' "$promote_workflow" || true)"
 verify_evidence_calls="$(grep -c 'destroy-exception-evidence.sh.*verify' "$promote_workflow" || true)"
