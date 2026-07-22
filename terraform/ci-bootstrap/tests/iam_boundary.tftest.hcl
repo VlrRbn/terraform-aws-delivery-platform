@@ -17,6 +17,15 @@ run "least_privilege_ci_roles" {
 
   assert {
     condition = (
+      local.environments.dev.project_name == "delivery-platform-dev" &&
+      local.environments.stage.project_name == "delivery-platform-stage" &&
+      local.environments.prod.project_name == "delivery-platform-prod"
+    )
+    error_message = "The bootstrap boundary must keep the fixed dev, stage, and prod project prefixes."
+  }
+
+  assert {
+    condition = (
       strcontains(aws_iam_role.plan["dev"].assume_role_policy, "ref:refs/heads/main") &&
       !strcontains(aws_iam_role.plan["dev"].assume_role_policy, "pull_request")
     )
@@ -134,4 +143,48 @@ run "least_privilege_ci_roles" {
     )
     error_message = "The dev apply role must deny named stage/prod resources without denying its own project prefix."
   }
+}
+
+run "duplicate_environment_project_names_fail" {
+  command = plan
+
+  variables {
+    environment_project_names = {
+      dev   = "delivery-platform-dev"
+      stage = "delivery-platform-dev"
+      prod  = "delivery-platform-prod"
+    }
+  }
+
+  expect_failures = [var.environment_project_names]
+}
+
+run "ci_role_prefix_conflict_fails" {
+  command = plan
+
+  variables {
+    role_name_prefix = "delivery-platform-dev"
+  }
+
+  expect_failures = [var.role_name_prefix]
+}
+
+run "ci_role_prefix_child_conflict_fails" {
+  command = plan
+
+  variables {
+    role_name_prefix = "delivery-platform-dev-ci"
+  }
+
+  expect_failures = [var.role_name_prefix]
+}
+
+run "ci_role_prefix_parent_conflict_fails" {
+  command = plan
+
+  variables {
+    role_name_prefix = "delivery-platform"
+  }
+
+  expect_failures = [var.role_name_prefix]
 }

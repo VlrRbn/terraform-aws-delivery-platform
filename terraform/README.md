@@ -14,6 +14,11 @@ This directory contains multiple Terraform roots. They are intentionally separat
 | `audit-trail/` | CloudTrail log bucket/trail and optional S3 state data events | Separate lifecycle; trail and bucket are protected by `prevent_destroy` |
 | `modules/network/` | Shared infrastructure module | Used by dev/stage/prod roots |
 
+The three application roots are disposable. Keep `backend-bootstrap/` and
+`ci-bootstrap/` when environments will be recreated by later workflow runs;
+keep `audit-trail/` for as long as its evidence is required. See
+`docs/operations.md` for the production teardown sequence.
+
 ## Recommended Bootstrap Order
 
 ```text

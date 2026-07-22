@@ -49,6 +49,16 @@ assert_assignment() {
   fi
 }
 
+assert_exact_line() {
+  local expected="$1"
+  local file="$2"
+
+  if [[ "$(grep -Fxc -- "$expected" "$file")" -ne 1 ]]; then
+    echo "Unsafe Terraform config: $file must contain exactly one line: $expected" >&2
+    exit 64
+  fi
+}
+
 expected_key="delivery-platform/${TARGET_ENV}/full/terraform.tfstate"
 expected_project="delivery-platform-${TARGET_ENV}"
 
@@ -69,5 +79,6 @@ assert_assignment aws_region "eu-west-1" "$TFVARS_FILE"
 assert_assignment project_name "$expected_project" "$TFVARS_FILE"
 assert_assignment environment "$TARGET_ENV" "$TFVARS_FILE"
 assert_assignment tf_state_key "$expected_key" "$TFVARS_FILE"
+assert_exact_line 'availability_zones   = ["eu-west-1a", "eu-west-1b"]' "$TFVARS_FILE"
 
-echo "Validated Terraform config for ${TARGET_ENV}: backend key, region, project, and environment match."
+echo "Validated Terraform config for ${TARGET_ENV}: backend key, region, project, environment, and Availability Zones match."

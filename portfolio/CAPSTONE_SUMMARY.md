@@ -6,7 +6,8 @@ Terraform changes need reviewable, repeatable, auditable delivery. A manual `ter
 
 ## Solution
 
-This proof builds a Terraform delivery pipeline with:
+This proof builds a single-account portfolio/lab Terraform delivery pipeline
+with:
 
 - remote state and lockfile;
 - GitHub Actions OIDC;
@@ -18,8 +19,8 @@ This proof builds a Terraform delivery pipeline with:
 - GitHub Environment approvals;
 - exact saved-plan apply;
 - post-apply drift check;
-- runtime health evidence;
-- CloudTrail audit evidence;
+- optional runtime health evidence;
+- optional CloudTrail audit evidence;
 - incident/runbook documentation.
 
 ## Environments
@@ -29,6 +30,12 @@ dev -> stage -> prod
 ```
 
 Each environment has separate state keys and promotion evidence.
+
+Environment-specific IAM roles, state, tags, names, and deny guardrails reduce
+accidental cross-environment access inside the shared account. They are not a
+hard production isolation boundary; separate application accounts are the
+preferred production-like design. The solo approval gate is likewise a
+deliberate pause rather than independent review.
 
 ## Evidence Collected
 
@@ -40,6 +47,6 @@ Each environment has separate state keys and promotion evidence.
 - approval context;
 - apply output;
 - post-apply drift check;
-- runtime health summary;
-- CloudTrail audit snapshot;
+- runtime health summary, when collected separately;
+- CloudTrail audit snapshot, when collected separately;
 - portfolio redaction checklist.

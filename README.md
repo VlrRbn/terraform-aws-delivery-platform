@@ -4,9 +4,16 @@
 [![Terraform Quality Gates](https://github.com/VlrRbn/terraform-aws-delivery-platform/actions/workflows/terraform-quality-gates.yml/badge.svg)](https://github.com/VlrRbn/terraform-aws-delivery-platform/actions/workflows/terraform-quality-gates.yml)
 [![Drift Check](https://github.com/VlrRbn/terraform-aws-delivery-platform/actions/workflows/drift-check.yml/badge.svg)](https://github.com/VlrRbn/terraform-aws-delivery-platform/actions/workflows/drift-check.yml)
 
-Production-style Terraform delivery pipeline for AWS infrastructure.
+Portfolio/lab implementation of a production-style Terraform delivery pipeline for AWS infrastructure.
 
 This repository demonstrates how to move Terraform changes through review, policy checks, risk classification, approval, exact-plan apply, drift detection, incident runbooks, and CloudTrail-backed audit evidence.
+
+The current deployment deliberately uses one AWS account with separate state,
+roles, naming, tags, and deny guardrails for `dev`, `stage`, and `prod`. This is
+a practical portfolio/lab trade-off, not a hard production isolation boundary.
+A production-like deployment should use separate application accounts for the
+three environments. See `docs/architecture.md` for the boundary and migration
+trade-offs.
 
 ## What This Project Shows
 
@@ -64,6 +71,7 @@ Start here:
 - `docs/architecture.md` - infrastructure and delivery architecture.
 - `docs/security-model.md` - OIDC, IAM, state, secrets, and policy model.
 - `docs/operations.md` - normal promotion, drift, incident, and audit operations.
+- `docs/github-cli-runbook.md` - practical GitHub CLI commands for PRs, workflows, runs, artifacts, and repository settings.
 - `terraform/README.md` - Terraform roots and recommended bootstrap order.
 - `packer/README.md` - AMI build layout.
 - `policies/README.md` - security, cost, and risk policy behavior.
@@ -84,8 +92,10 @@ PR checks
 -> apply exact saved plan
 -> post-apply drift check
 -> promotion manifest
--> CloudTrail audit snapshot
 ```
+
+Runtime health and CloudTrail snapshots are separate read-only evidence steps;
+`promote.yml` does not collect them automatically.
 
 ## GitHub Workflows
 
@@ -118,6 +128,8 @@ terraform-prod:  TF_APPLY_ROLE_ARN_PROD
 
 Required reviewers and protected-branch deployment rules must be configured on
 all three environments; otherwise the apply job does not wait for manual approval.
+The solo portfolio/lab allows the repository owner to approve their own
+deployment. This provides a deliberate pause, but not independent review.
 
 GitHub owner/repository and the OIDC provider ARN are bootstrap inputs in `terraform/ci-bootstrap/`; workflows do not accept them as mutable repository variables.
 
@@ -202,4 +214,6 @@ See `SECURITY.md` for safe reporting and data-handling rules. See `CONTRIBUTING.
 
 ## Status
 
-This is a portfolio-grade infrastructure delivery project, not a reusable Terraform product module. The goal is to demonstrate delivery discipline, operational safety, and auditability.
+This is a portfolio-grade infrastructure delivery project, not a reusable
+Terraform product module or a claim of production account isolation. The goal
+is to demonstrate delivery discipline, operational safety, and auditability.

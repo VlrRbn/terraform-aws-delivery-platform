@@ -52,4 +52,10 @@ write_config dev "$wrong_region_dir" us-east-1
 expect_rejected wrong_region env TF_STATE_BUCKET="delivery-platform-test-state" \
   "$SCRIPT_DIR/validate-terraform-env-config.sh" dev "$wrong_region_dir"
 
+wrong_availability_zones_dir="$TEST_ROOT/wrong-availability-zones"
+write_config dev "$wrong_availability_zones_dir"
+sed -i 's/eu-west-1b/eu-west-1c/' "$wrong_availability_zones_dir/terraform.auto.tfvars"
+expect_rejected wrong_availability_zones env TF_STATE_BUCKET="delivery-platform-test-state" \
+  "$SCRIPT_DIR/validate-terraform-env-config.sh" dev "$wrong_availability_zones_dir"
+
 echo "terraform environment config tests passed"

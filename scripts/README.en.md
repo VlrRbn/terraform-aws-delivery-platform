@@ -14,7 +14,8 @@ The scripts do not change the infrastructure or its state.
 | `test-terraform-env-config.sh` | Runs positive and negative tests for generated environment configuration. |
 | `audit-legacy-ci-roles.sh` | Inventories old environment-owned CI roles and last-used evidence without changing AWS. |
 | `audit-github-environments.sh` | Verifies a manual reviewer, deployment branches, and environment-specific apply-role secret names through the read-only GitHub API; optional strict mode also requires independent review. |
-| `test-workflow-guardrails.sh` | Tests action SHA pins and positive/negative GitHub Environment audit fixtures. |
+| `test-workflow-guardrails.sh` | Tests action SHA pins, destructive-exception evidence, and positive/negative GitHub Environment audit fixtures. |
+| `destroy-exception-evidence.sh` | Creates and verifies immutable commit, plan, exception, and workflow-binding evidence for approved destructive changes. |
 | `promotion-evidence-template.sh` | Generates valid promotion evidence JSON. |
 | `reviewer-note-template.sh` | Generates a Markdown reviewer note from `risk-decision.json`. |
 | `runtime-health-check.sh` | Collects read-only ALB/ASG/CloudWatch runtime evidence. |

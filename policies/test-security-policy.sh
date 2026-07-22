@@ -15,33 +15,42 @@ trap 'rm -rf "$TMP_ROOT"' EXIT
 VALID_EXPIRES="$(date -u -d '+ 2 days' +%F)"
 TEST_TARGET_ENV="dev"
 TEST_RELEASE_ID="policy-test-001"
-TEST_COMMIT_SHA="0123456789abcdef0123456789abcdef01234567"
 VALID_DESTROY_EXCEPTION="$TMP_ROOT/allow-destroy-valid.json"
 WRONG_DESTROY_EXCEPTION="$TMP_ROOT/allow-destroy-wrong-address.json"
 WILDCARD_DESTROY_EXCEPTION="$TMP_ROOT/allow-destroy-invalid-wildcard.json"
 EXPIRED_DESTROY_EXCEPTION="$TMP_ROOT/allow-destroy-expired.json"
 LONG_LIVED_DESTROY_EXCEPTION="$TMP_ROOT/allow-destroy-too-long.json"
 WRONG_ENV_DESTROY_EXCEPTION="$TMP_ROOT/allow-destroy-wrong-env.json"
+WRONG_RELEASE_DESTROY_EXCEPTION="$TMP_ROOT/allow-destroy-wrong-release.json"
+MISSING_RELEASE_DESTROY_EXCEPTION="$TMP_ROOT/allow-destroy-missing-release.json"
+LEGACY_COMMIT_DESTROY_EXCEPTION="$TMP_ROOT/allow-destroy-legacy-commit.json"
+PARTIAL_DESTROY_PLAN="$TMP_ROOT/partially-approved-destroy-plan.json"
 
 jq --arg expires "$VALID_EXPIRES" --arg target_env "$TEST_TARGET_ENV" \
-  --arg release_id "$TEST_RELEASE_ID" --arg commit_sha "$TEST_COMMIT_SHA" \
-  '.expires = $expires | .target_env = $target_env | .release_id = $release_id | .commit_sha = $commit_sha' \
+  --arg release_id "$TEST_RELEASE_ID" \
+  '.expires = $expires | .target_env = $target_env | .release_id = $release_id' \
   "$SCRIPT_DIR/allow-destroy.example.json" > "$VALID_DESTROY_EXCEPTION"
 jq --arg expires "$VALID_EXPIRES" --arg target_env "$TEST_TARGET_ENV" \
-  --arg release_id "$TEST_RELEASE_ID" --arg commit_sha "$TEST_COMMIT_SHA" \
-  '.expires = $expires | .target_env = $target_env | .release_id = $release_id | .commit_sha = $commit_sha' \
+  --arg release_id "$TEST_RELEASE_ID" \
+  '.expires = $expires | .target_env = $target_env | .release_id = $release_id' \
   "$TEST_DIR/allow-destroy-wrong-address.json" > "$WRONG_DESTROY_EXCEPTION"
 jq --arg expires "$VALID_EXPIRES" --arg target_env "$TEST_TARGET_ENV" \
-  --arg release_id "$TEST_RELEASE_ID" --arg commit_sha "$TEST_COMMIT_SHA" \
-  '.expires = $expires | .target_env = $target_env | .release_id = $release_id | .commit_sha = $commit_sha' \
+  --arg release_id "$TEST_RELEASE_ID" \
+  '.expires = $expires | .target_env = $target_env | .release_id = $release_id' \
   "$TEST_DIR/allow-destroy-invalid-wildcard.json" > "$WILDCARD_DESTROY_EXCEPTION"
-jq --arg target_env "$TEST_TARGET_ENV" --arg release_id "$TEST_RELEASE_ID" --arg commit_sha "$TEST_COMMIT_SHA" \
-  '.target_env = $target_env | .release_id = $release_id | .commit_sha = $commit_sha' \
+jq --arg target_env "$TEST_TARGET_ENV" --arg release_id "$TEST_RELEASE_ID" \
+  '.target_env = $target_env | .release_id = $release_id' \
   "$TEST_DIR/allow-destroy-expired.json" > "$EXPIRED_DESTROY_EXCEPTION"
-jq --arg target_env "$TEST_TARGET_ENV" --arg release_id "$TEST_RELEASE_ID" --arg commit_sha "$TEST_COMMIT_SHA" \
-  '.target_env = $target_env | .release_id = $release_id | .commit_sha = $commit_sha' \
+jq --arg target_env "$TEST_TARGET_ENV" --arg release_id "$TEST_RELEASE_ID" \
+  '.target_env = $target_env | .release_id = $release_id' \
   "$TEST_DIR/allow-destroy-too-long.json" > "$LONG_LIVED_DESTROY_EXCEPTION"
 jq '.target_env = "prod"' "$VALID_DESTROY_EXCEPTION" > "$WRONG_ENV_DESTROY_EXCEPTION"
+jq '.release_id = "different-release"' "$VALID_DESTROY_EXCEPTION" > "$WRONG_RELEASE_DESTROY_EXCEPTION"
+jq 'del(.release_id)' "$VALID_DESTROY_EXCEPTION" > "$MISSING_RELEASE_DESTROY_EXCEPTION"
+jq '.commit_sha = "0123456789abcdef0123456789abcdef01234567"' \
+  "$VALID_DESTROY_EXCEPTION" > "$LEGACY_COMMIT_DESTROY_EXCEPTION"
+jq '.resource_changes += [(.resource_changes[0] | .address = "module.network.aws_cloudwatch_metric_alarm.second_alarm")]' \
+  "$TEST_DIR/destroy-plan.json" > "$PARTIAL_DESTROY_PLAN"
 
 # These fixtures are intentionally small synthetic Terraform JSON plans.
 # They keep policy behavior testable without an AWS account or provider initialization.
@@ -97,7 +106,7 @@ pass_case_with_exception() {
   local exception="$3"
   local out_dir="$TMP_ROOT/$name"
   mkdir -p "$out_dir"
-  ALLOW_DESTROY_FILE="$exception" TARGET_ENV="$TEST_TARGET_ENV" RELEASE_ID="$TEST_RELEASE_ID" COMMIT_SHA="$TEST_COMMIT_SHA" \
+  ALLOW_DESTROY_FILE="$exception" TARGET_ENV="$TEST_TARGET_ENV" RELEASE_ID="$TEST_RELEASE_ID" \
     OUT_DIR="$out_dir" "$POLICY" "$plan" >"/tmp/delivery-platform-policy-${name}.log"
   grep -q 'POLICY_DECISION=ALLOW' "$out_dir/policy-decision.txt"
   # A valid exception removes only approved destructive addresses from the effective deny list.
@@ -114,7 +123,7 @@ deny_case_with_exception() {
   local out_dir="$TMP_ROOT/$name"
   mkdir -p "$out_dir"
   set +e
-  ALLOW_DESTROY_FILE="$exception" TARGET_ENV="$TEST_TARGET_ENV" RELEASE_ID="$TEST_RELEASE_ID" COMMIT_SHA="$TEST_COMMIT_SHA" \
+  ALLOW_DESTROY_FILE="$exception" TARGET_ENV="$TEST_TARGET_ENV" RELEASE_ID="$TEST_RELEASE_ID" \
     OUT_DIR="$out_dir" "$POLICY" "$plan" >"/tmp/delivery-platform-policy-${name}.log" 2>&1
   local ec=$?
   set -e
@@ -136,7 +145,7 @@ input_error_case() {
   local out_dir="$TMP_ROOT/$name"
   mkdir -p "$out_dir"
   set +e
-  ALLOW_DESTROY_FILE="$exception" TARGET_ENV="$TEST_TARGET_ENV" RELEASE_ID="$TEST_RELEASE_ID" COMMIT_SHA="$TEST_COMMIT_SHA" \
+  ALLOW_DESTROY_FILE="$exception" TARGET_ENV="$TEST_TARGET_ENV" RELEASE_ID="$TEST_RELEASE_ID" \
     OUT_DIR="$out_dir" "$POLICY" "$plan" >"/tmp/delivery-platform-policy-${name}.log" 2>&1
   local ec=$?
   set -e
@@ -173,11 +182,16 @@ deny_case empty_tags "$TEST_DIR/empty-tags-plan.json" deny_missing_required_tags
 # from the current plan is rejected as invalid approval evidence.
 pass_case_with_exception destroy_allowed "$TEST_DIR/destroy-plan.json" "$VALID_DESTROY_EXCEPTION"
 input_error_case destroy_wrong_exception "$TEST_DIR/destroy-plan.json" "$WRONG_DESTROY_EXCEPTION"
+deny_case_with_exception destroy_partially_allowed "$PARTIAL_DESTROY_PLAN" \
+  "$VALID_DESTROY_EXCEPTION" deny_destructive_change
 
 # Exception validation: wildcard, expired, and long-lived approvals fail closed.
 input_error_case invalid_wildcard_exception "$TEST_DIR/destroy-plan.json" "$WILDCARD_DESTROY_EXCEPTION"
 input_error_case expired_exception "$TEST_DIR/destroy-plan.json" "$EXPIRED_DESTROY_EXCEPTION"
 input_error_case long_lived_exception "$TEST_DIR/destroy-plan.json" "$LONG_LIVED_DESTROY_EXCEPTION"
 input_error_case wrong_environment_binding "$TEST_DIR/destroy-plan.json" "$WRONG_ENV_DESTROY_EXCEPTION"
+input_error_case wrong_release_binding "$TEST_DIR/destroy-plan.json" "$WRONG_RELEASE_DESTROY_EXCEPTION"
+input_error_case missing_release_binding "$TEST_DIR/destroy-plan.json" "$MISSING_RELEASE_DESTROY_EXCEPTION"
+input_error_case legacy_commit_field "$TEST_DIR/destroy-plan.json" "$LEGACY_COMMIT_DESTROY_EXCEPTION"
 
 echo "policy tests passed"

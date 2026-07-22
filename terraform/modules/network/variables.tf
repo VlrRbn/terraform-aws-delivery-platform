@@ -78,6 +78,30 @@ variable "public_subnet_cidrs" {
 
 }
 
+variable "availability_zones" {
+  type        = list(string)
+  description = "Ordered Availability Zones used by subnet keys a-f. The list order is part of the subnet lifecycle contract."
+
+  validation {
+    condition = (
+      length(var.availability_zones) >= max(length(var.public_subnet_cidrs), length(var.private_subnet_cidrs)) &&
+      length(var.availability_zones) <= 6
+    )
+    error_message = "availability_zones must contain enough entries for every public and private subnet and at most six entries."
+  }
+
+  validation {
+    condition = (
+      length(distinct(var.availability_zones)) == length(var.availability_zones) &&
+      alltrue([
+        for availability_zone in var.availability_zones :
+        can(regex("^${var.aws_region}[a-z]$", availability_zone))
+      ])
+    )
+    error_message = "availability_zones must contain unique Availability Zones from aws_region."
+  }
+}
+
 variable "private_subnet_cidrs" {
   type        = list(string)
   description = "Private subnet CIDR blocks (minimum 2 for ASG spread)"

@@ -38,6 +38,20 @@ variable "private_subnet_cidrs" {
   type = list(string)
 }
 
+variable "availability_zones" {
+  type    = list(string)
+  default = ["eu-west-1a", "eu-west-1b"]
+
+  validation {
+    condition = (
+      length(var.availability_zones) == 2 &&
+      try(var.availability_zones[0] == "eu-west-1a", false) &&
+      try(var.availability_zones[1] == "eu-west-1b", false)
+    )
+    error_message = "The prod environment is pinned to availability_zones = [\"eu-west-1a\", \"eu-west-1b\"]."
+  }
+}
+
 variable "instance_type_web" {
   type    = string
   default = "t3.micro"

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1160" height="720" viewBox="0 0 1160 720" role="img" aria-labelledby="title desc">
   <title id="title">Terraform AWS Delivery Platform Architecture</title>
-  <desc id="desc">GitHub Actions delivery pipeline with Terraform policy gates, AWS OIDC roles, S3 state, and multi-environment AWS runtime stacks.</desc>
+  <desc id="desc">Single-account portfolio and lab architecture with a GitHub Actions Terraform delivery pipeline, AWS OIDC roles, S3 state, disposable application environments, and separately collected audit evidence.</desc>
   <defs>
     <style>
       .bg { fill: #f7f4ed; }
@@ -23,7 +23,7 @@
 
   <rect class="bg" x="0" y="0" width="1160" height="720" />
   <text class="text title" x="40" y="48">Terraform AWS Delivery Platform</text>
-  <text class="text small" x="40" y="74">Exact-plan delivery, policy gates, environment promotion, drift detection, and audit evidence.</text>
+  <text class="text small" x="40" y="74">Single-account portfolio/lab: exact-plan delivery, deny guardrails, promotion, and separate evidence collection.</text>
 
   <rect class="group" x="40" y="105" width="315" height="500" />
   <text class="text label" x="62" y="136">GitHub Control Plane</text>
@@ -39,7 +39,7 @@
   <rect class="warn" x="65" y="348" width="265" height="92" />
   <text class="text label" x="88" y="378">Policy + Risk Gates</text>
   <text class="text small" x="88" y="400">security, cost, blast radius</text>
-  <text class="text small" x="88" y="420">GO / HOLD / BLOCKED</text>
+  <text class="text small" x="88" y="420">ALLOW / DENY + risk level</text>
 
   <rect class="safe" x="65" y="466" width="265" height="92" />
   <text class="text label" x="88" y="496">Environment Approval</text>
@@ -64,8 +64,8 @@
   <text class="text small" x="468" y="458">dev/stage/prod state keys</text>
 
   <rect class="box" x="445" y="502" width="250" height="64" />
-  <text class="text label" x="468" y="531">CloudTrail Evidence</text>
-  <text class="text small" x="468" y="553">who changed what and when</text>
+  <text class="text label" x="468" y="531">Optional CloudTrail Evidence</text>
+  <text class="text small" x="468" y="553">separate read-only collector</text>
 
   <rect class="group" x="785" y="105" width="330" height="500" />
   <text class="text label" x="807" y="136">AWS Runtime Environments</text>
@@ -85,14 +85,15 @@
   <text class="text small" x="835" y="448">health alarms and checkpoints</text>
 
   <rect class="box" x="812" y="492" width="275" height="74" />
-  <text class="text label" x="835" y="522">Runtime Evidence</text>
-  <text class="text small" x="835" y="544">health, drift, incident notes</text>
+  <text class="text label" x="835" y="516">Verification Evidence</text>
+  <text class="text small" x="835" y="538">post-apply drift (automatic)</text>
+  <text class="text small" x="835" y="558">runtime health (separate helper)</text>
 
-  <path class="arrow" d="M330 192 C375 192, 395 190, 445 190" />
-  <path class="arrow" d="M330 286 C378 286, 396 302, 445 309" />
-  <path class="arrow" d="M330 512 C392 512, 392 430, 445 430" />
-  <path class="arrow" d="M695 309 C755 309, 760 195, 812 195" />
-  <path class="arrow" d="M695 430 C755 430, 760 417, 812 417" />
-  <path class="arrow dashed" d="M950 566 C950 640, 570 650, 570 566" />
-  <text class="text small" x="612" y="668">post-apply drift + CloudTrail audit closes the loop</text>
+  <path class="arrow" d="M330 192 H445" />
+  <path class="arrow" d="M330 286 H390 V311 H445" />
+  <path class="arrow" d="M330 512 H390 V430 H445" />
+  <path class="arrow" d="M695 311 H750 V195 H812" />
+  <path class="arrow" d="M695 430 H812" />
+  <path class="arrow dashed" d="M950 566 V635 H570 V566" />
+  <text class="text small" x="602" y="668">dashed path: optional/manual AWS evidence collection</text>
 </svg>

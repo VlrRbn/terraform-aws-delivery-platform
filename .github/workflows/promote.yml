@@ -307,7 +307,6 @@ jobs:
           env "${destroy_args[@]}" \
             TARGET_ENV="$TARGET_ENV" \
             RELEASE_ID="$RELEASE_ID" \
-            COMMIT_SHA="${{ github.sha }}" \
             OUT_DIR="$root/policy-results" \
             "$PROJECT_DIR/policies/security-policy.sh" "$root/tfplan.json" \
             2>&1 | tee "$root/policy-results/policy-output.txt"
@@ -374,7 +373,11 @@ jobs:
       - name: Prepare review artifact
         id: artifact
         working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ inputs.target_env }}
+        env:
+          REPO_ROOT: ${{ github.workspace }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
+          set -Eeuo pipefail
           artifact="delivery-platform-${TARGET_ENV}-${RELEASE_ID}-plan"
           mkdir -p review-artifact
           cp backend.hcl terraform.auto.tfvars review-artifact/
@@ -383,7 +386,14 @@ jobs:
           [[ -f promotion-evidence.json ]] && cp promotion-evidence.json review-artifact/ || true
           [[ -f source-workflow-run-verification.json ]] && cp source-workflow-run-verification.json review-artifact/ || true
           if [[ "$ALLOW_DESTROY_FILE_INPUT" != "none" ]]; then
-            cp "$PROJECT_DIR/$ALLOW_DESTROY_FILE_INPUT" review-artifact/allow-destroy.json
+            exception_file="$REPO_ROOT/$ALLOW_DESTROY_FILE_INPUT"
+            cp "$exception_file" review-artifact/allow-destroy.json
+            "$REPO_ROOT/scripts/destroy-exception-evidence.sh" create \
+              tfplan \
+              tfplan.sha256 \
+              "$exception_file" \
+              "$ALLOW_DESTROY_FILE_INPUT" \
+              review-artifact/destroy-exception-evidence.json
           fi
           echo "artifact_name=$artifact" >> "$GITHUB_OUTPUT"
 
@@ -429,6 +439,27 @@ jobs:
         with:
           name: ${{ needs.plan.outputs.artifact_name }}
           path: /tmp/delivery-platform-review-artifact
+
+      - name: Verify destructive exception evidence
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          artifact_dir=/tmp/delivery-platform-review-artifact
+          exception_file="$artifact_dir/allow-destroy.json"
+          evidence_file="$artifact_dir/destroy-exception-evidence.json"
+
+          if [[ -e "$exception_file" || -e "$evidence_file" ]]; then
+            [[ -s "$exception_file" && -s "$evidence_file" ]] || {
+              echo "Destroy exception and generated evidence must both be present" >&2
+              exit 1
+            }
+            "$PROJECT_DIR/scripts/destroy-exception-evidence.sh" verify \
+              "$artifact_dir/tfplan" \
+              "$artifact_dir/tfplan.sha256" \
+              "$exception_file" \
+              "$evidence_file"
+          fi
 
       - name: Select apply role
         id: role

@@ -20,6 +20,12 @@ This folder contains the policy and review-decision scripts used by the proof pi
 - missing required tags;
 - NAT/public ALB warnings.
 
+Destructive exceptions are exact, short-lived change-control records under
+`approved-destroy/`. They bind to an environment, release ID, and destructive
+addresses in the fresh plan. Workflow-generated evidence separately binds the
+reviewed exception to `github.sha` and the binary plan SHA256, avoiding a
+self-referential commit field while preserving fail-closed verification.
+
 Outputs:
 
 ```text

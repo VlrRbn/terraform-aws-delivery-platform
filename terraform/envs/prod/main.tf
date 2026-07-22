@@ -16,6 +16,7 @@ module "network" {
   vpc_cidr                       = var.vpc_cidr
   public_subnet_cidrs            = var.public_subnet_cidrs
   private_subnet_cidrs           = var.private_subnet_cidrs
+  availability_zones             = var.availability_zones
   instance_type_web              = var.instance_type_web
   common_tags                    = var.common_tags
   enable_web_ssm                 = var.enable_web_ssm

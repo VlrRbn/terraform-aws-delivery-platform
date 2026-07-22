@@ -1,21 +1,16 @@
-#--- Discover available AZs ---
-data "aws_availability_zones" "available" {
-  state = "available"
-}
-
 #--- Derived subnet maps and helper lists ---
 locals {
   az_letters = ["a", "b", "c", "d", "e", "f"]
-  azs        = slice(data.aws_availability_zones.available.names, 0, max(length(var.public_subnet_cidrs), length(var.private_subnet_cidrs)))
+  azs        = var.availability_zones
 
   public_subnet_map = {
     for idx, cidr in var.public_subnet_cidrs :
-    local.az_letters[idx] => { cidr = cidr, az = local.azs[idx] }
+    local.az_letters[idx] => { cidr = cidr, az = var.availability_zones[idx] }
   }
 
   private_subnet_map = {
     for idx, cidr in var.private_subnet_cidrs :
-    local.az_letters[idx] => { cidr = cidr, az = local.azs[idx] }
+    local.az_letters[idx] => { cidr = cidr, az = var.availability_zones[idx] }
   }
 
   private_subnet_ids = [
