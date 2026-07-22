@@ -32,36 +32,48 @@ You also need:
 - GitHub Actions enabled;
 - a GitHub OIDC provider in AWS, or permission to create one through Terraform.
 
+Set the checkout path once. The commands below use this absolute path and do
+not depend on the directory left by a previous section:
+
+```bash
+export REPO_ROOT="$(git rev-parse --show-toplevel)"
+```
+
 ## 1. Run Local Checks
 
 From repository root:
 
 ```bash
-make check
+make -C "$REPO_ROOT" check
 ```
 
 If Terraform provider downloads are available:
 
 ```bash
-make check-full
+make -C "$REPO_ROOT" check-full
 ```
 
 Static analysis:
 
 ```bash
-make tflint
-make checkov
+make -C "$REPO_ROOT" tflint
+make -C "$REPO_ROOT" checkov
 ```
 
 ## 2. Bootstrap Remote State
 
-The backend bootstrap root creates the S3 bucket used for Terraform state:
+The backend bootstrap root creates the S3 bucket used for Terraform state.
+Choose a globally unique bucket name before planning:
 
 ```bash
-cd terraform/backend-bootstrap
-terraform init
-terraform plan -out=tfplan
-terraform apply tfplan
+export TF_STATE_BUCKET="YOUR_GLOBALLY_UNIQUE_TFSTATE_BUCKET"
+
+terraform -chdir="$REPO_ROOT/terraform/backend-bootstrap" init
+terraform -chdir="$REPO_ROOT/terraform/backend-bootstrap" plan \
+  -var="state_bucket_name=$TF_STATE_BUCKET" \
+  -out=tfplan
+terraform -chdir="$REPO_ROOT/terraform/backend-bootstrap" apply tfplan
+terraform -chdir="$REPO_ROOT/terraform/backend-bootstrap" output state_bucket_name
 ```
 
 Save the output bucket name. You will use it as:
@@ -77,25 +89,28 @@ Do not commit local `tfplan`, state, or generated backend files.
 CI identities have their own lifecycle and state. Create them before the first workflow plan; do not try to create these roles through themselves.
 
 ```bash
-cd terraform/ci-bootstrap
-cp terraform.tfvars.example terraform.tfvars
-cp backend.hcl.example backend.hcl
-terraform init -backend-config=backend.hcl
-terraform plan -out=tfplan
-terraform apply tfplan
-terraform output plan_role_arns
-terraform output apply_role_arns
-terraform output runtime_permissions_boundary_arns
+cp "$REPO_ROOT/terraform/ci-bootstrap/terraform.tfvars.example" \
+  "$REPO_ROOT/terraform/ci-bootstrap/terraform.tfvars"
+cp "$REPO_ROOT/terraform/ci-bootstrap/backend.hcl.example" \
+  "$REPO_ROOT/terraform/ci-bootstrap/backend.hcl"
+
+terraform -chdir="$REPO_ROOT/terraform/ci-bootstrap" init \
+  -backend-config=backend.hcl
+terraform -chdir="$REPO_ROOT/terraform/ci-bootstrap" plan -out=tfplan
+terraform -chdir="$REPO_ROOT/terraform/ci-bootstrap" apply tfplan
+terraform -chdir="$REPO_ROOT/terraform/ci-bootstrap" output plan_role_arns
+terraform -chdir="$REPO_ROOT/terraform/ci-bootstrap" output apply_role_arns
+terraform -chdir="$REPO_ROOT/terraform/ci-bootstrap" output runtime_permissions_boundary_arns
 ```
 
 Run this bootstrap with the same reviewed local/admin bootstrap identity used for the state bucket. Copy plan outputs to repository variables and apply outputs to the corresponding GitHub Environment secrets. The runtime boundary output is evidence that the bootstrap-owned guardrails exist; environment workflows derive the same boundary names from their fixed project names.
 
-For an existing deployment that still contains the former environment-owned CI
-roles, create the bootstrap roles first and switch GitHub to their ARNs before
-planning environment roots. Environment states use `removed` blocks to forget
-legacy CI roles without deleting them. Fresh deployments do not need this
-migration step. Review and remove orphaned legacy roles separately only after
-the new workflow path is verified.
+The portfolio cutover was completed after verifying that the application states
+were empty, and its transitional `moved` and `removed` blocks have been removed.
+This checkout therefore does not provide automatic migration from historical
+environment states. Before using it with an older state, inventory that state
+and prepare a separately reviewed `moved`/`removed` migration for its exact
+addresses.
 
 Use `scripts/audit-legacy-ci-roles.sh` with a read-only AWS identity to collect
 their trust, inline/attached policies, and IAM last-used evidence. The helper
@@ -103,31 +118,32 @@ does not delete roles. If the old repository path is inactive and the new roles
 are verified, retire the legacy roles in a separate explicitly approved admin
 change rather than adding deletion permissions to an environment apply role.
 
-The first environment migration can also remove the old inline secret policy
-from the proxy and create a separate web runtime role. Treat that as a legacy
-cutover, not as part of a fresh setup. If its reviewed plan contains an
-intentional replacement or removal, use the two-run repository-bound exception
-process documented in `docs/operations.md`. Never add CI roles, wildcard
-addresses, or unrelated resources to that exception.
+Do not use a destructive workflow exception as a substitute for a state
+migration. Never add CI roles, wildcard addresses, or unrelated resources to an
+application-environment exception.
 
 ## 4. Build AMIs With Packer
 
 Build the web AMI:
 
 ```bash
-cd packer/web
-packer init .
-packer validate .
-packer build .
+(
+  cd "$REPO_ROOT/packer/web"
+  packer init .
+  packer validate .
+  packer build .
+)
 ```
 
 Build the SSM proxy AMI:
 
 ```bash
-cd ../ssm_proxy
-packer init .
-packer validate .
-packer build .
+(
+  cd "$REPO_ROOT/packer/ssm_proxy"
+  packer init .
+  packer validate .
+  packer build .
+)
 ```
 
 Save the AMI IDs:
@@ -216,6 +232,10 @@ Review the generated plan artifact before approving the `terraform-dev` environm
 
 The apply job must use the exact reviewed saved plan.
 
+The full `dev -> stage -> prod` promotion chain must use both the same
+`release_id` and the same commit SHA. If `main` changes after the dev or stage
+run, do not promote the earlier run: start a new chain from dev for the new SHA.
+
 ## 8. Promote To Stage
 
 After dev apply succeeds, copy the dev workflow run URL.
@@ -270,11 +290,11 @@ Exit code `0` means clean. Exit code `2` means drift or unapplied diff and must 
 The audit trail is intentionally separate from the app environments:
 
 ```bash
-cd terraform/audit-trail
-cp terraform.tfvars.example terraform.tfvars
-terraform init
-terraform plan -out=tfplan
-terraform apply tfplan
+cp "$REPO_ROOT/terraform/audit-trail/terraform.tfvars.example" \
+  "$REPO_ROOT/terraform/audit-trail/terraform.tfvars"
+terraform -chdir="$REPO_ROOT/terraform/audit-trail" init
+terraform -chdir="$REPO_ROOT/terraform/audit-trail" plan -out=tfplan
+terraform -chdir="$REPO_ROOT/terraform/audit-trail" apply tfplan
 ```
 
 It creates:
@@ -291,7 +311,7 @@ Keep `force_destroy_log_bucket = false` unless this is a disposable lab.
 After a workflow run:
 
 ```bash
-./scripts/cloudtrail-audit-snapshot.sh \
+"$REPO_ROOT/scripts/cloudtrail-audit-snapshot.sh" \
   --region eu-west-1 \
   --state-bucket YOUR_TFSTATE_BUCKET \
   --state-prefix delivery-platform/dev/full/ \
@@ -307,7 +327,9 @@ The snapshot is read-only. It collects AWS-side evidence such as caller identity
 Raw evidence can contain sensitive metadata.
 
 ```bash
-./scripts/redact-evidence.sh evidence/raw-run evidence/redacted-run
+"$REPO_ROOT/scripts/redact-evidence.sh" \
+  "$REPO_ROOT/evidence/raw-run" \
+  "$REPO_ROOT/evidence/redacted-run"
 ```
 
 Then review the redacted output manually.
@@ -343,7 +365,8 @@ prod_teardown_mode             = true
 ```
 
 Only after that apply succeeds, create and review a fresh destroy plan. The
-tested local/admin procedure is documented in `docs/operations.md`. Do not use
+tested local/admin procedures for all three environments are documented in
+`docs/operations.md`. Do not use
 `prod_teardown_mode` as a way to run destroy directly against an ALB whose
 deletion protection is still enabled.
 

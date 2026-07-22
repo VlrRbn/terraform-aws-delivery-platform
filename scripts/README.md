@@ -10,11 +10,11 @@ The scripts do not change the infrastructure or its state.
 | --- | --- |
 | `run-local-checks.sh` | Runs safe local checks. |
 | `write-terraform-env-files.sh` | Generates temporary `backend.hcl` and `terraform.auto.tfvars` for CI. |
-| `validate-terraform-env-config.sh` | Fails closed when backend key, region, project, or environment does not match the selected root. |
+| `validate-terraform-env-config.sh` | Fails closed when backend key, region, project, environment, or the fixed `eu-west-1a`/`eu-west-1b` Availability Zones do not match the selected root. |
 | `test-terraform-env-config.sh` | Runs positive and negative tests for generated environment configuration. |
 | `audit-legacy-ci-roles.sh` | Inventories old environment-owned CI roles and last-used evidence without changing AWS. |
 | `audit-github-environments.sh` | Verifies a manual reviewer, deployment branches, and environment-specific apply-role secret names through the read-only GitHub API; optional strict mode also requires independent review. |
-| `test-workflow-guardrails.sh` | Tests action SHA pins, destructive-exception evidence, and positive/negative GitHub Environment audit fixtures. |
+| `test-workflow-guardrails.sh` | Tests action SHA pins, the exact Checkov `3.3.8` pin, the stable `TFLint and Checkov` PR check, destructive-exception evidence, and positive/negative GitHub Environment audit fixtures. |
 | `destroy-exception-evidence.sh` | Creates and verifies immutable commit, plan, exception, and workflow-binding evidence for approved destructive changes. |
 | `promotion-evidence-template.sh` | Generates valid promotion evidence JSON. |
 | `reviewer-note-template.sh` | Generates a Markdown reviewer note from `risk-decision.json`. |

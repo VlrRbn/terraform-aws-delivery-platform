@@ -75,7 +75,7 @@ Start here:
 - `terraform/README.md` - Terraform roots and recommended bootstrap order.
 - `packer/README.md` - AMI build layout.
 - `policies/README.md` - security, cost, and risk policy behavior.
-- `scripts/README.en.md` - helper script reference.
+- `scripts/README.md` - helper script reference.
 - `docs/portfolio-evidence.md` and `docs/redaction_checklist.md` - what can be shared publicly and what must be redacted.
 
 ## Delivery Flow
@@ -100,13 +100,14 @@ Runtime health and CloudTrail snapshots are separate read-only evidence steps;
 ## GitHub Workflows
 
 - `pr-checks.yml` runs local safety checks, shell checks, Packer fmt, Terraform fmt, policy tests, and Terraform validation without applying infrastructure.
-- `terraform-quality-gates.yml` runs TFLint and Checkov as a separate static-analysis layer.
+- `terraform-quality-gates.yml` creates the stable required check `TFLint and Checkov` for every PR. It runs both scanners for Terraform, policy, or quality-gate changes and reports an explicit successful no-op for other changes.
 - `drift-check.yml` runs an AWS-backed drift plan for one environment using the plan role.
 - `promote.yml` builds a reviewed plan, evaluates policy/risk, waits for approval, applies the exact saved plan, and publishes evidence artifacts.
 
 ## Required GitHub Variables
 
-Set these as repository or environment variables:
+Set these as repository variables. The plan and drift jobs are not attached to
+GitHub Environments, so environment-scoped variables are not available to them:
 
 ```text
 AWS_REGION
@@ -204,7 +205,8 @@ Raw evidence can contain account IDs, ARNs, IPs, DNS names, and internal metadat
 
 Workflow actions are pinned to full commit SHAs. The reviewed major version is
 kept as an inline YAML comment, and updates should go through a separate
-dependency review.
+dependency review. Checkov is installed at the reviewed exact version `3.3.8`;
+its pin is enforced by workflow guardrail tests.
 
 ## Project Hygiene
 

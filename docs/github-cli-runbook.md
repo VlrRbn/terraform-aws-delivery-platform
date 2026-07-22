@@ -67,8 +67,12 @@ gh pr create \
   --base main \
   --head fix/short-description \
   --title "fix(ci): short commit subject" \
-  --body "Explain why the change is required and what behavior it fixes."
+  --template pull_request_template.md
 ```
+
+`--template` uses `.github/pull_request_template.md` and keeps PR descriptions
+consistent. Passing `--body` replaces the template instead of filling it; use
+`--body` only when intentionally supplying the complete PR description.
 
 Wait for required checks:
 
@@ -168,6 +172,11 @@ gh run view RUN_ID \
 ```
 
 ## Promote To Dev
+
+Use one `release_id` and one commit SHA for the complete
+`dev -> stage -> prod` chain. Each command below dispatches `main` as it exists
+at that moment. If another commit reaches `main` during promotion, restart from
+dev instead of using an older source run URL.
 
 ```bash
 gh workflow run promote.yml \
