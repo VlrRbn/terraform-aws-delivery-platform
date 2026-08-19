@@ -9,6 +9,8 @@ REPO_ROOT="${REPO_ROOT:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
 : "${GITHUB_SHA:?GITHUB_SHA is required}"
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 : "${GITHUB_RUN_ID:?GITHUB_RUN_ID is required}"
+: "${REVIEW_ARTIFACT_NAME:?REVIEW_ARTIFACT_NAME is required}"
+: "${APPLY_ARTIFACT_NAME:?APPLY_ARTIFACT_NAME is required}"
 
 root="${ENV_ROOT:-$REPO_ROOT/terraform/envs/$TARGET_ENV}"
 review_dir="${REVIEW_ARTIFACT_DIR:-/tmp/delivery-platform-review-artifact}"
@@ -35,8 +37,8 @@ fi
 jq -n \
   --arg release_id "$RELEASE_ID" --arg target_env "$TARGET_ENV" --arg source_env "$SOURCE_ENV" \
   --arg commit_sha "$GITHUB_SHA" --arg workflow_run_url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-  --arg workflow_run_id "$GITHUB_RUN_ID" --arg review_artifact "delivery-platform-${TARGET_ENV}-${RELEASE_ID}-plan" \
-  --arg apply_artifact "delivery-platform-${TARGET_ENV}-${RELEASE_ID}-apply" --arg tfplan_sha256 "$tfplan_sha256" \
+  --arg workflow_run_id "$GITHUB_RUN_ID" --arg review_artifact "$REVIEW_ARTIFACT_NAME" \
+  --arg apply_artifact "$APPLY_ARTIFACT_NAME" --arg tfplan_sha256 "$tfplan_sha256" \
   --arg security_policy "$security_policy" --arg cost_policy "$cost_policy" --arg risk "$risk" \
   --arg apply_allowed "$apply_allowed" --arg apply_exitcode "$apply_ec" --arg post_apply_exitcode "$post_apply_ec" \
   --arg final_status "$final_status" \

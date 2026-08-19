@@ -321,6 +321,8 @@ jobs:
         if: always()
         env:
           TARGET_ENV: ${{ needs.plan.outputs.target_env }}
+          REVIEW_ARTIFACT_NAME: ${{ needs.plan.outputs.artifact_name }}
+          APPLY_ARTIFACT_NAME: delivery-platform-${{ needs.plan.outputs.target_env }}-${{ env.RELEASE_ID }}-apply
         run: ${{ env.PROJECT_DIR }}/scripts/write-promotion-manifest.sh
 
       - name: Upload apply artifact

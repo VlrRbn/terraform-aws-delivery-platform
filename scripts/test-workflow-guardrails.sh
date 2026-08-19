@@ -100,6 +100,63 @@ if ! ((checkout_line < validate_line && validate_line < plan_line && plan_line <
   exit 1
 fi
 
+validate_exact_apply_contract() {
+  local workflow_file="$1"
+  local apply_job
+  local expected_line
+  local count
+  # GitHub expressions are intentional literal YAML lines in this contract fixture.
+  # shellcheck disable=SC2016
+  local -a required_apply_lines=(
+    '    needs: plan'
+    '    environment: terraform-${{ needs.plan.outputs.target_env }}'
+    '          name: ${{ needs.plan.outputs.artifact_name }}'
+    '          path: /tmp/delivery-platform-review-artifact'
+    '          sha256sum -c tfplan.sha256'
+    '          terraform apply -input=false -no-color tfplan 2>&1 | tee apply.txt'
+    '          REVIEW_ARTIFACT_NAME: ${{ needs.plan.outputs.artifact_name }}'
+    '          APPLY_ARTIFACT_NAME: delivery-platform-${{ needs.plan.outputs.target_env }}-${{ env.RELEASE_ID }}-apply'
+  )
+
+  apply_job="$(sed -n '/^  apply:$/,$p' "$workflow_file")"
+  [[ -n "$apply_job" ]] || return 1
+
+  for expected_line in "${required_apply_lines[@]}"; do
+    count="$(grep -Fxc "$expected_line" <<<"$apply_job" || true)"
+    [[ "$count" -eq 1 ]] || return 1
+  done
+}
+
+if ! validate_exact_apply_contract "$promote_workflow"; then
+  echo "promote workflow exact-plan apply contract changed" >&2
+  exit 1
+fi
+
+wrong_needs_workflow="$TMP_ROOT/promote-wrong-needs.yml"
+cp "$promote_workflow" "$wrong_needs_workflow"
+sed -i 's/^    needs: plan$/    needs: unrelated-job/' "$wrong_needs_workflow"
+if validate_exact_apply_contract "$wrong_needs_workflow"; then
+  echo "Apply contract accepted a job without needs: plan" >&2
+  exit 1
+fi
+
+replanned_apply_workflow="$TMP_ROOT/promote-replanned-apply.yml"
+cp "$promote_workflow" "$replanned_apply_workflow"
+sed -i 's/terraform apply -input=false -no-color tfplan/terraform apply -input=false -no-color/' \
+  "$replanned_apply_workflow"
+if validate_exact_apply_contract "$replanned_apply_workflow"; then
+  echo "Apply contract accepted an apply without the reviewed tfplan" >&2
+  exit 1
+fi
+
+unchecked_apply_workflow="$TMP_ROOT/promote-unchecked-apply.yml"
+cp "$promote_workflow" "$unchecked_apply_workflow"
+sed -i 's/sha256sum -c tfplan.sha256/sha256sum tfplan/' "$unchecked_apply_workflow"
+if validate_exact_apply_contract "$unchecked_apply_workflow"; then
+  echo "Apply contract accepted an apply without checksum verification" >&2
+  exit 1
+fi
+
 promotion_helpers=(
   "$SCRIPT_DIR/validate-promotion-inputs.sh"
   "$SCRIPT_DIR/verify-promotion-source.sh"
