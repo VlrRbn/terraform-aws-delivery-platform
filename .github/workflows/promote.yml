@@ -75,61 +75,16 @@ jobs:
         shell: bash
 
     steps:
-      - name: Validate workflow inputs
-        id: inputs
-        run: |
-          set -Eeuo pipefail
-          case "$TARGET_ENV" in dev|stage|prod) ;; *) exit 64 ;; esac
-          if [[ "$CONFIRM_APPLY" != "APPLY" ]]; then
-            echo "confirm_apply must be APPLY" >&2
-            exit 64
-          fi
-          if [[ -z "$RELEASE_ID" ]]; then
-            echo "release_id is required" >&2
-            exit 64
-          fi
-          if [[ ! "$RELEASE_ID" =~ ^[A-Za-z0-9._-]{1,80}$ ]]; then
-            echo "release_id must contain only letters, numbers, dot, underscore, and dash; max length 80" >&2
-            exit 64
-          fi
-          if [[ "$ALLOW_DESTROY_FILE_INPUT" != "none" && ! "$ALLOW_DESTROY_FILE_INPUT" =~ ^policies/approved-destroy/[A-Za-z0-9._-]+\.json$ ]]; then
-            echo "allow_destroy_file must be none or a JSON file under policies/approved-destroy/" >&2
-            exit 64
-          fi
-          if [[ "$TARGET_ENV" == "dev" && "$SOURCE_ENV" != "none" ]]; then
-            echo "dev promotion must use source_env=none" >&2
-            exit 64
-          fi
-          if [[ "$TARGET_ENV" == "dev" && "$SOURCE_WORKFLOW_RUN_URL" != "none" ]]; then
-            echo "dev promotion must use source_workflow_run_url=none" >&2
-            exit 64
-          fi
-          if [[ "$TARGET_ENV" == "stage" && "$SOURCE_ENV" != "dev" ]]; then
-            echo "stage promotion must use source_env=dev" >&2
-            exit 64
-          fi
-          if [[ "$TARGET_ENV" == "prod" && "$SOURCE_ENV" != "stage" ]]; then
-            echo "prod promotion must use source_env=stage" >&2
-            exit 64
-          fi
-          if [[ "$TARGET_ENV" != "dev" ]]; then
-            if [[ -z "$SOURCE_WORKFLOW_RUN_URL" || "$SOURCE_WORKFLOW_RUN_URL" == "none" ]]; then
-              echo "stage/prod promotion requires source_workflow_run_url" >&2
-              exit 64
-            fi
-            if [[ ! "$SOURCE_WORKFLOW_RUN_URL" =~ ^https://github.com/${{ github.repository }}/actions/runs/[0-9]+$ ]]; then
-              echo "source_workflow_run_url must be the canonical GitHub Actions run URL for this repository" >&2
-              exit 64
-            fi
-          fi
-          echo "target_env=$TARGET_ENV" >> "$GITHUB_OUTPUT"
-
       - name: Checkout exact commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Validate workflow inputs
+        id: inputs
+        run: ${{ env.PROJECT_DIR }}/scripts/validate-promotion-inputs.sh
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
@@ -165,43 +120,7 @@ jobs:
         if: env.TARGET_ENV != 'dev'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -Eeuo pipefail
-          if [[ ! "$SOURCE_WORKFLOW_RUN_URL" =~ ^https://github\.com/${GITHUB_REPOSITORY}/actions/runs/([0-9]+)$ ]]; then
-            echo "source_workflow_run_url must be the canonical GitHub Actions run URL for this repository" >&2
-            exit 64
-          fi
-
-          run_id="${BASH_REMATCH[1]}"
-          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")"
-          status="$(jq -r '.status // ""' <<<"$run_json")"
-          conclusion="$(jq -r '.conclusion // ""' <<<"$run_json")"
-          head_sha="$(jq -r '.head_sha // ""' <<<"$run_json")"
-          html_url="$(jq -r '.html_url // ""' <<<"$run_json")"
-          workflow_name="$(jq -r '.name // ""' <<<"$run_json")"
-          workflow_path="$(jq -r '.path // ""' <<<"$run_json")"
-          display_title="$(jq -r '.display_title // ""' <<<"$run_json")"
-
-          if [[ "$status" != "completed" || "$conclusion" != "success" ]]; then
-            echo "source workflow run is not completed successfully: status=$status conclusion=$conclusion" >&2
-            exit 64
-          fi
-          if [[ "$head_sha" != "${GITHUB_SHA}" ]]; then
-            echo "source workflow run SHA does not match this workflow SHA: source=$head_sha current=${GITHUB_SHA}" >&2
-            exit 64
-          fi
-          if [[ "$workflow_path" != ".github/workflows/promote.yml" ]]; then
-            echo "source workflow run must be promote: name=$workflow_name path=$workflow_path" >&2
-            exit 64
-          fi
-
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
-          echo "html_url=$html_url" >> "$GITHUB_OUTPUT"
-          echo "conclusion=$conclusion" >> "$GITHUB_OUTPUT"
-          echo "workflow_name=$workflow_name" >> "$GITHUB_OUTPUT"
-          echo "workflow_path=$workflow_path" >> "$GITHUB_OUTPUT"
-          echo "display_title=$display_title" >> "$GITHUB_OUTPUT"
+        run: ${{ env.PROJECT_DIR }}/scripts/verify-promotion-source.sh run
 
       - name: Download source apply artifact
         if: env.TARGET_ENV != 'dev'
@@ -214,28 +133,7 @@ jobs:
 
       - name: Validate source promotion manifest
         if: env.TARGET_ENV != 'dev'
-        run: |
-          set -Eeuo pipefail
-          manifest="/tmp/delivery-platform-source-apply/promotion-manifest.json"
-          if [[ ! -s "$manifest" ]]; then
-            echo "source apply artifact does not contain promotion-manifest.json" >&2
-            exit 64
-          fi
-
-          jq -e \
-            --arg release_id "$RELEASE_ID" \
-            --arg source_env "$SOURCE_ENV" \
-            --arg commit_sha "${{ github.sha }}" \
-            --arg source_url "$SOURCE_WORKFLOW_RUN_URL" \
-            '
-              .release_id == $release_id
-              and .target_env == $source_env
-              and .commit_sha == $commit_sha
-              and .workflow_run_url == $source_url
-              and .apply_exitcode == "0"
-              and .post_apply_exitcode == "0"
-              and .final_status == "PROMOTABLE"
-            ' "$manifest" >/dev/null
+        run: ${{ env.PROJECT_DIR }}/scripts/verify-promotion-source.sh manifest
 
       - name: Select plan role
         id: role
@@ -289,113 +187,11 @@ jobs:
           SOURCE_WORKFLOW_NAME: ${{ steps.source_run.outputs.workflow_name }}
           SOURCE_WORKFLOW_PATH: ${{ steps.source_run.outputs.workflow_path }}
           SOURCE_WORKFLOW_DISPLAY_TITLE: ${{ steps.source_run.outputs.display_title }}
-        run: |
-          set -Eeuo pipefail
-          root="${PROJECT_DIR}/terraform/envs/${TARGET_ENV}"
-          mkdir -p "$root/policy-results" "$root/cost-policy-results" "$root/risk-results"
-
-          destroy_args=()
-          if [[ "$ALLOW_DESTROY_FILE_INPUT" != "none" ]]; then
-            if [[ ! -s "$PROJECT_DIR/$ALLOW_DESTROY_FILE_INPUT" ]]; then
-              echo "Reviewed destroy exception not found: $ALLOW_DESTROY_FILE_INPUT" >&2
-              exit 64
-            fi
-            destroy_args=(ALLOW_DESTROY_FILE="$PROJECT_DIR/$ALLOW_DESTROY_FILE_INPUT")
-          fi
-
-          set +e
-          env "${destroy_args[@]}" \
-            TARGET_ENV="$TARGET_ENV" \
-            RELEASE_ID="$RELEASE_ID" \
-            OUT_DIR="$root/policy-results" \
-            "$PROJECT_DIR/policies/security-policy.sh" "$root/tfplan.json" \
-            2>&1 | tee "$root/policy-results/policy-output.txt"
-          policy_ec=${PIPESTATUS[0]}
-          set -e
-          echo "$policy_ec" > "$root/policy-results/policy-exitcode.txt"
-          case "$policy_ec" in 0|2) ;; *) exit "$policy_ec" ;; esac
-
-          set +e
-          OUT_DIR="$root/cost-policy-results" \
-            "$PROJECT_DIR/policies/cost-policy.sh" "$root/tfplan.json" "$TARGET_ENV" \
-            2>&1 | tee "$root/cost-policy-results/cost-policy-output.txt"
-          cost_ec=${PIPESTATUS[0]}
-          set -e
-          echo "$cost_ec" > "$root/cost-policy-results/cost-policy-exitcode.txt"
-          case "$cost_ec" in 0|2) ;; *) exit "$cost_ec" ;; esac
-
-          promotion_args=()
-          if [[ "$TARGET_ENV" != "dev" ]]; then
-            jq -n \
-              --arg release_id "$RELEASE_ID" \
-              --arg source_env "$SOURCE_ENV" \
-              --arg status "passed" \
-              --arg commit_sha "${{ github.sha }}" \
-              --arg source_workflow_run_url "$SOURCE_WORKFLOW_RUN_URL" \
-              --arg source_workflow_run_id "$SOURCE_WORKFLOW_RUN_ID" \
-              --arg source_workflow_head_sha "$SOURCE_WORKFLOW_HEAD_SHA" \
-              --arg source_workflow_conclusion "$SOURCE_WORKFLOW_CONCLUSION" \
-              --arg source_workflow_name "$SOURCE_WORKFLOW_NAME" \
-              --arg source_workflow_path "$SOURCE_WORKFLOW_PATH" \
-              --arg source_workflow_display_title "$SOURCE_WORKFLOW_DISPLAY_TITLE" \
-              '{
-                release_id: $release_id,
-                source_env: $source_env,
-                status: $status,
-                commit_sha: $commit_sha,
-                source_workflow_run_url: $source_workflow_run_url,
-                source_workflow_run_id: $source_workflow_run_id,
-                source_workflow_head_sha: $source_workflow_head_sha,
-                source_workflow_conclusion: $source_workflow_conclusion,
-                source_workflow_name: $source_workflow_name,
-                source_workflow_path: $source_workflow_path,
-                source_workflow_display_title: $source_workflow_display_title
-              }' \
-              > "$root/promotion-evidence.json"
-            cp "$root/promotion-evidence.json" "$root/source-workflow-run-verification.json"
-            promotion_args=(PROMOTION_EVIDENCE_FILE="$root/promotion-evidence.json" SOURCE_ENV="$SOURCE_ENV")
-          fi
-
-          set +e
-          env \
-            POLICY_DIR="$root/policy-results" \
-            COST_DIR="$root/cost-policy-results" \
-            OUT_DIR="$root/risk-results" \
-            RELEASE_ID="$RELEASE_ID" \
-            "${promotion_args[@]}" \
-            "$PROJECT_DIR/policies/risk-classifier.sh" "$root/tfplan.json" "$TARGET_ENV" \
-            2>&1 | tee "$root/risk-results/risk-classifier-output.txt"
-          risk_ec=${PIPESTATUS[0]}
-          set -e
-          echo "$risk_ec" > "$root/risk-results/risk-classifier-exitcode.txt"
-          case "$risk_ec" in 0|2) ;; *) exit "$risk_ec" ;; esac
+        run: ${{ env.PROJECT_DIR }}/scripts/run-promotion-policy-gates.sh
 
       - name: Prepare review artifact
         id: artifact
-        working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ inputs.target_env }}
-        env:
-          REPO_ROOT: ${{ github.workspace }}
-          GITHUB_SHA: ${{ github.sha }}
-        run: |
-          set -Eeuo pipefail
-          artifact="delivery-platform-${TARGET_ENV}-${RELEASE_ID}-plan"
-          mkdir -p review-artifact
-          cp backend.hcl terraform.auto.tfvars review-artifact/
-          cp tfplan tfplan.sha256 tfplan.txt tfplan.json review-artifact/
-          cp -r policy-results cost-policy-results risk-results review-artifact/
-          [[ -f promotion-evidence.json ]] && cp promotion-evidence.json review-artifact/ || true
-          [[ -f source-workflow-run-verification.json ]] && cp source-workflow-run-verification.json review-artifact/ || true
-          if [[ "$ALLOW_DESTROY_FILE_INPUT" != "none" ]]; then
-            exception_file="$REPO_ROOT/$ALLOW_DESTROY_FILE_INPUT"
-            cp "$exception_file" review-artifact/allow-destroy.json
-            "$REPO_ROOT/scripts/destroy-exception-evidence.sh" create \
-              tfplan \
-              tfplan.sha256 \
-              "$exception_file" \
-              "$ALLOW_DESTROY_FILE_INPUT" \
-              review-artifact/destroy-exception-evidence.json
-          fi
-          echo "artifact_name=$artifact" >> "$GITHUB_OUTPUT"
+        run: ${{ env.PROJECT_DIR }}/scripts/prepare-review-artifact.sh
 
       - name: Upload review artifact before approval
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -523,70 +319,9 @@ jobs:
 
       - name: Write promotion manifest
         if: always()
-        working-directory: ${{ env.PROJECT_DIR }}/terraform/envs/${{ needs.plan.outputs.target_env }}
-        run: |
-          set -Eeuo pipefail
-          apply_ec="missing"
-          post_apply_ec="missing"
-          [[ -s apply_exitcode.txt ]] && apply_ec="$(tr -d '[:space:]' < apply_exitcode.txt)"
-          [[ -s post_apply_exitcode.txt ]] && post_apply_ec="$(tr -d '[:space:]' < post_apply_exitcode.txt)"
-
-          final_status="NOT_PROMOTABLE"
-          if [[ "$apply_ec" == "0" && "$post_apply_ec" == "0" ]]; then
-            final_status="PROMOTABLE"
-          fi
-
-          tfplan_sha256="missing"
-          if [[ -s /tmp/delivery-platform-review-artifact/tfplan.sha256 ]]; then
-            tfplan_sha256="$(awk '{print $1}' /tmp/delivery-platform-review-artifact/tfplan.sha256)"
-          fi
-
-          security_policy="n/a"
-          cost_policy="n/a"
-          risk="n/a"
-          apply_allowed="n/a"
-          [[ -s /tmp/delivery-platform-review-artifact/policy-results/policy-decision.txt ]] && security_policy="$(tr -d '[:space:]' < /tmp/delivery-platform-review-artifact/policy-results/policy-decision.txt)"
-          [[ -s /tmp/delivery-platform-review-artifact/cost-policy-results/cost-decision.txt ]] && cost_policy="$(tr -d '[:space:]' < /tmp/delivery-platform-review-artifact/cost-policy-results/cost-decision.txt)"
-          if [[ -s /tmp/delivery-platform-review-artifact/risk-results/risk-decision.json ]]; then
-            risk="$(jq -r '.risk // "n/a"' /tmp/delivery-platform-review-artifact/risk-results/risk-decision.json)"
-            apply_allowed="$(jq -r '.apply_allowed // "n/a"' /tmp/delivery-platform-review-artifact/risk-results/risk-decision.json)"
-          fi
-
-          jq -n \
-            --arg release_id "$RELEASE_ID" \
-            --arg target_env "${{ needs.plan.outputs.target_env }}" \
-            --arg source_env "$SOURCE_ENV" \
-            --arg commit_sha "${{ github.sha }}" \
-            --arg workflow_run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --arg workflow_run_id "${{ github.run_id }}" \
-            --arg review_artifact "${{ needs.plan.outputs.artifact_name }}" \
-            --arg apply_artifact "delivery-platform-${{ needs.plan.outputs.target_env }}-${RELEASE_ID}-apply" \
-            --arg tfplan_sha256 "$tfplan_sha256" \
-            --arg security_policy "$security_policy" \
-            --arg cost_policy "$cost_policy" \
-            --arg risk "$risk" \
-            --arg apply_allowed "$apply_allowed" \
-            --arg apply_exitcode "$apply_ec" \
-            --arg post_apply_exitcode "$post_apply_ec" \
-            --arg final_status "$final_status" \
-            '{
-              release_id: $release_id,
-              target_env: $target_env,
-              source_env: $source_env,
-              commit_sha: $commit_sha,
-              workflow_run_url: $workflow_run_url,
-              workflow_run_id: $workflow_run_id,
-              review_artifact: $review_artifact,
-              apply_artifact: $apply_artifact,
-              tfplan_sha256: $tfplan_sha256,
-              security_policy: $security_policy,
-              cost_policy: $cost_policy,
-              risk: $risk,
-              apply_allowed: $apply_allowed,
-              apply_exitcode: $apply_exitcode,
-              post_apply_exitcode: $post_apply_exitcode,
-              final_status: $final_status
-            }' > promotion-manifest.json
+        env:
+          TARGET_ENV: ${{ needs.plan.outputs.target_env }}
+        run: ${{ env.PROJECT_DIR }}/scripts/write-promotion-manifest.sh
 
       - name: Upload apply artifact
         if: always()

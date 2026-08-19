@@ -15,6 +15,12 @@ The scripts do not change the infrastructure or its state.
 | `audit-legacy-ci-roles.sh` | Inventories old environment-owned CI roles and last-used evidence without changing AWS. |
 | `audit-github-environments.sh` | Verifies a manual reviewer, deployment branches, and environment-specific apply-role secret names through the read-only GitHub API; optional strict mode also requires independent review. |
 | `test-workflow-guardrails.sh` | Tests action SHA pins, the exact Checkov `3.3.8` pin, the stable `TFLint and Checkov` PR check, destructive-exception evidence, and positive/negative GitHub Environment audit fixtures. |
+| `validate-promotion-inputs.sh` | Validates promotion environment, release, source-run, confirmation, and destroy-exception inputs. |
+| `verify-promotion-source.sh` | Verifies the source workflow run and its downloaded promotion manifest. |
+| `run-promotion-policy-gates.sh` | Runs security, cost, and final risk gates while preserving DENY evidence. |
+| `prepare-review-artifact.sh` | Builds the immutable plan review bundle and optional destroy-exception evidence. |
+| `write-promotion-manifest.sh` | Writes the post-apply promotion result, including drift and reviewed-plan bindings. |
+| `test-promotion-workflow-scripts.sh` | Runs positive and fail-closed tests for all promotion helper contracts. |
 | `destroy-exception-evidence.sh` | Creates and verifies immutable commit, plan, exception, and workflow-binding evidence for approved destructive changes. |
 | `promotion-evidence-template.sh` | Generates valid promotion evidence JSON. |
 | `reviewer-note-template.sh` | Generates a Markdown reviewer note from `risk-decision.json`. |

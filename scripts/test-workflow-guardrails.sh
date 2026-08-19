@@ -53,14 +53,62 @@ if validate_checkov_pin "$unpinned_quality_workflow" >/dev/null 2>&1; then
 fi
 
 promote_workflow="$PROJECT_DIR/.github/workflows/promote.yml"
-create_evidence_calls="$(grep -c 'destroy-exception-evidence.sh.*create' "$promote_workflow" || true)"
+prepare_artifact_script="$SCRIPT_DIR/prepare-review-artifact.sh"
+create_evidence_calls="$(grep -c 'destroy-exception-evidence.sh.*create' "$prepare_artifact_script" || true)"
 verify_evidence_calls="$(grep -c 'destroy-exception-evidence.sh.*verify' "$promote_workflow" || true)"
 if [[ "$create_evidence_calls" -ne 1 ]]; then
-  echo "promote workflow must create destroy exception evidence exactly once" >&2
+  echo "review artifact preparation must create destroy exception evidence exactly once" >&2
   exit 1
 fi
 if [[ "$verify_evidence_calls" -ne 1 ]]; then
   echo "promote workflow must verify destroy exception evidence exactly once" >&2
+  exit 1
+fi
+
+declare -A expected_promotion_calls=(
+  [validate-promotion-inputs.sh]=1
+  [verify-promotion-source.sh]=2
+  [run-promotion-policy-gates.sh]=1
+  [prepare-review-artifact.sh]=1
+  [write-promotion-manifest.sh]=1
+)
+for helper in "${!expected_promotion_calls[@]}"; do
+  calls="$(grep -c "scripts/$helper" "$promote_workflow" || true)"
+  if [[ "$calls" -ne "${expected_promotion_calls[$helper]}" ]]; then
+    echo "promote workflow must call $helper exactly ${expected_promotion_calls[$helper]} time(s)" >&2
+    exit 1
+  fi
+done
+
+first_line() {
+  grep -nF "$1" "$promote_workflow" | head -n 1 | cut -d: -f1
+}
+
+checkout_line="$(first_line 'name: Checkout exact commit')"
+validate_line="$(first_line 'scripts/validate-promotion-inputs.sh')"
+plan_line="$(first_line 'name: Terraform init and plan')"
+policy_line="$(first_line 'scripts/run-promotion-policy-gates.sh')"
+prepare_line="$(first_line 'scripts/prepare-review-artifact.sh')"
+upload_line="$(first_line 'name: Upload review artifact before approval')"
+environment_line="$(first_line 'environment: terraform-')"
+verify_line="$(first_line 'name: Verify destructive exception evidence')"
+apply_line="$(first_line 'name: Apply exact saved plan')"
+manifest_line="$(first_line 'scripts/write-promotion-manifest.sh')"
+
+if ! ((checkout_line < validate_line && validate_line < plan_line && plan_line < policy_line && policy_line < prepare_line && prepare_line < upload_line && upload_line < environment_line && environment_line < verify_line && verify_line < apply_line && apply_line < manifest_line)); then
+  echo "promote workflow trust-boundary order changed" >&2
+  exit 1
+fi
+
+promotion_helpers=(
+  "$SCRIPT_DIR/validate-promotion-inputs.sh"
+  "$SCRIPT_DIR/verify-promotion-source.sh"
+  "$SCRIPT_DIR/run-promotion-policy-gates.sh"
+  "$SCRIPT_DIR/prepare-review-artifact.sh"
+  "$SCRIPT_DIR/write-promotion-manifest.sh"
+)
+if grep -Eq 'terraform[[:space:]]+(apply|destroy)' "${promotion_helpers[@]}"; then
+  echo "Promotion helpers must not run terraform apply or destroy" >&2
   exit 1
 fi
 
