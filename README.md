@@ -104,6 +104,11 @@ Runtime health and CloudTrail snapshots are separate read-only evidence steps;
 - `drift-check.yml` runs an AWS-backed drift plan for one environment using the plan role.
 - `promote.yml` builds a reviewed plan, evaluates policy/risk, waits for approval, applies the exact saved plan, and publishes evidence artifacts.
 
+The promotion workflow intentionally stays as the orchestration map. Its input, source-verification,
+policy, artifact, and manifest logic lives in five tested scripts documented in `scripts/README.md`;
+OIDC role assumption, Environment approval, exact-plan apply, and post-apply drift remain visible
+in the workflow.
+
 ## Required GitHub Variables
 
 Set these as repository variables. The plan and drift jobs are not attached to

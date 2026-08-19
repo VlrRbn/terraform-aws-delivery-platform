@@ -64,6 +64,9 @@ step "Running Terraform environment config tests"
 step "Running workflow guardrail tests"
 "$PROJECT_DIR/scripts/test-workflow-guardrails.sh"
 
+step "Running promotion workflow script tests"
+"$PROJECT_DIR/scripts/test-promotion-workflow-scripts.sh"
+
 if [[ "$RUN_OPA" == "true" ]]; then
   if command -v opa >/dev/null 2>&1; then
     step "Running OPA policy tests"
