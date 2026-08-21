@@ -11,6 +11,28 @@ This folder contains the policy and review-decision scripts used by the proof pi
 | `risk-classifier.sh` | Final apply risk decision from plan, policy outputs, target env, promotion evidence, and incident mode. | Yes, when final risk is `BLOCKED`. |
 | `opa/terraform.rego` | Optional OPA/Rego parity checks for selected security rules. | Only when used by `test-opa.sh` or CI. |
 
+## Authoritative Policy Boundary
+
+The shell and `jq` policy chain is the only authoritative enforcement path:
+
+```text
+security-policy.sh
+-> cost-policy.sh
+-> risk-classifier.sh
+-> promotion apply gate
+```
+
+`opa/terraform.rego` is a non-authoritative reference implementation for a
+selected subset of security rules. It does not evaluate the complete cost,
+promotion-evidence, incident-mode, destructive-exception, or final risk contracts.
+The promotion workflow does not consume its output, and Rego results cannot allow,
+override, or bypass a shell-policy decision.
+
+`test-opa.sh` is therefore an optional parity exercise, not a second policy engine.
+If OPA becomes authoritative in the future, that must be an explicit contract change:
+the workflow, evidence outputs, exit-code behavior, tests, and this document must
+move together rather than running two authoritative engines in parallel.
+
 ## Security Policy
 
 `security-policy.sh` catches security and change-management risks:
