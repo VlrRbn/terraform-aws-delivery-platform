@@ -124,7 +124,7 @@ jobs:
 
       - name: Download source apply artifact
         if: env.TARGET_ENV != 'dev'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: delivery-platform-${{ env.SOURCE_ENV }}-${{ env.RELEASE_ID }}-apply
           path: /tmp/delivery-platform-source-apply
@@ -150,7 +150,7 @@ jobs:
           echo "role_arn=$role" >> "$GITHUB_OUTPUT"
 
       - name: Assume plan role
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: ${{ steps.role.outputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
@@ -194,7 +194,7 @@ jobs:
         run: ${{ env.PROJECT_DIR }}/scripts/prepare-review-artifact.sh
 
       - name: Upload review artifact before approval
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ steps.artifact.outputs.artifact_name }}
           path: ${{ env.PROJECT_DIR }}/terraform/envs/${{ inputs.target_env }}/review-artifact/
@@ -231,7 +231,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Download approved review artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ needs.plan.outputs.artifact_name }}
           path: /tmp/delivery-platform-review-artifact
@@ -272,7 +272,7 @@ jobs:
           echo "role_arn=$role" >> "$GITHUB_OUTPUT"
 
       - name: Assume apply role after approval
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: ${{ steps.role.outputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
@@ -327,7 +327,7 @@ jobs:
 
       - name: Upload apply artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: delivery-platform-${{ needs.plan.outputs.target_env }}-${{ env.RELEASE_ID }}-apply
           path: |
